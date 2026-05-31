@@ -33,7 +33,8 @@ CREATE TABLE sys_menu (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
   name VARCHAR(100) NOT NULL,
   path VARCHAR(160) NOT NULL,
-  permission_code VARCHAR(120) NOT NULL,
+  -- 菜单权限码允许为空，便于后续扩展纯分组菜单；非空值必须引用权限字典，避免菜单与 RBAC 权限脱节。
+  permission_code VARCHAR(120) NULL,
   sort_order INT NOT NULL DEFAULT 0,
   enabled BOOLEAN NOT NULL DEFAULT TRUE,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -112,6 +113,7 @@ CREATE TABLE appointment_record (
   administrative_appointment_opinion TEXT NULL,
   administrative_appointment_date DATE NULL,
   form_filler VARCHAR(100) NULL,
+  -- 任免表照片通过文件表统一管理，空值表示尚未上传照片。
   photo_file_id BIGINT NULL,
   created_by BIGINT NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -150,9 +152,21 @@ CREATE TABLE sys_file (
 
 CREATE INDEX idx_sys_user_department_id ON sys_user(department_id);
 CREATE INDEX idx_sys_user_deleted ON sys_user(deleted);
+CREATE INDEX idx_sys_user_role_role_id ON sys_user_role(role_id);
+CREATE INDEX idx_sys_role_permission_permission_id ON sys_role_permission(permission_id);
+CREATE INDEX idx_sys_menu_permission_code ON sys_menu(permission_code);
+CREATE INDEX idx_appointment_record_photo_file_id ON appointment_record(photo_file_id);
 CREATE INDEX idx_appointment_record_deleted ON appointment_record(deleted);
 CREATE INDEX idx_appointment_family_record_id ON appointment_family_member(appointment_record_id);
 CREATE INDEX idx_sys_file_business ON sys_file(business_type, business_id);
+CREATE INDEX idx_sys_file_deleted ON sys_file(deleted);
+
+-- 关键领域外键：菜单权限码和任免照片文件均由数据库兜底保护，支撑权限配置、照片上传和逻辑删除场景的二次开发。
+ALTER TABLE sys_menu
+  ADD CONSTRAINT fk_sys_menu_permission_code FOREIGN KEY (permission_code) REFERENCES sys_permission(code);
+
+ALTER TABLE appointment_record
+  ADD CONSTRAINT fk_appointment_record_photo_file FOREIGN KEY (photo_file_id) REFERENCES sys_file(id);
 
 -- 部门初始化：第一版固定内置党群人力部和综合管理部，后续新增部门时应同步扩展菜单和权限。
 INSERT INTO sys_department(code, name, sort_order) VALUES
@@ -163,6 +177,16 @@ INSERT INTO sys_department(code, name, sort_order) VALUES
 INSERT INTO sys_role(code, name) VALUES
 ('SUPER_ADMIN', '超级管理员'),
 ('DEPARTMENT_USER', '部门用户');
+
+-- 默认超级管理员仅用于系统首版初始化，生产环境上线后应及时修改密码；密码为 xjyadmin 的 BCrypt 哈希，禁止写入明文密码。
+INSERT INTO sys_user(username, password_hash, phone, status) VALUES
+('superadmin', '$2a$10$olR149mDbEaGg4Nv5yB3ceiUgmmBBMRpk0OwPgOy1y382WAG555RK', '00000000000', 'ENABLED');
+
+INSERT INTO sys_user_role(user_id, role_id)
+SELECT u.id, r.id
+FROM sys_user u
+JOIN sys_role r ON r.code = 'SUPER_ADMIN'
+WHERE u.username = 'superadmin';
 
 -- 权限初始化：权限码作为后端鉴权和前端菜单过滤的稳定标识，业务逻辑不要依赖中文名称。
 INSERT INTO sys_permission(code, name, description) VALUES
