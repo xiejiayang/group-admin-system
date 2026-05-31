@@ -1,6 +1,7 @@
 package com.company.admin.file;
 
 import com.company.admin.common.BusinessException;
+import com.company.admin.file.dto.FileDownloadResource;
 import com.company.admin.file.dto.FileUploadResponse;
 import com.company.admin.system.Department;
 import com.company.admin.system.DepartmentAccessPolicy;
@@ -8,27 +9,34 @@ import com.company.admin.system.Permission;
 import com.company.admin.system.Role;
 import com.company.admin.system.User;
 import com.company.admin.system.UserRepository;
-import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
+import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 import javax.imageio.ImageIO;
+import javax.imageio.ImageReader;
+import javax.imageio.stream.ImageInputStream;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 
 @Service
 public class FileService {
 
     private static final long MAX_ID_PHOTO_SIZE_BYTES = 2L * 1024 * 1024;
+    private static final long MAX_ID_PHOTO_PIXELS = 12_000_000L;
+    private static final int MAX_ID_PHOTO_WIDTH = 5_000;
+    private static final int MAX_ID_PHOTO_HEIGHT = 5_000;
     private static final double MIN_ID_PHOTO_RATIO = 0.65;
     private static final double MAX_ID_PHOTO_RATIO = 0.85;
     private static final String PARTY_HR_DEPARTMENT = "PARTY_HR";
@@ -54,20 +62,20 @@ public class FileService {
 
         String originalName = safeOriginalName(file.getOriginalFilename());
         String extension = extension(originalName);
-        validateMimeAndExtension(file.getContentType(), extension);
-
-        BufferedImage image = readImage(file);
-        validateIdPhotoRatio(image);
+        DetectedImage image = readImageMetadata(file);
+        validateMimeAndExtension(file.getContentType(), extension, image);
+        validateIdPhotoDimensions(image);
 
         String storedName = UUID.randomUUID() + extension;
         Path storagePath = storagePath(storedName);
         writeFile(file, storagePath);
+        registerRollbackCleanup(storagePath);
 
         SysFile sysFile = new SysFile();
         sysFile.setOriginalName(originalName);
         sysFile.setStoredName(storedName);
         sysFile.setStoragePath(storagePath.toString());
-        sysFile.setMimeType(file.getContentType());
+        sysFile.setMimeType(image.mimeType());
         sysFile.setSizeBytes(file.getSize());
         sysFile.setBusinessType(FileBusinessTypes.ID_PHOTO);
         sysFile.setBusinessId(null);
@@ -75,13 +83,29 @@ public class FileService {
         sysFile.setUploadedAt(LocalDateTime.now());
         sysFile.setDeleted(false);
 
-        // 落库供任免表引用：任免记录只保存 sys_file.id，避免业务表直接承载文件元数据。
-        SysFile saved = sysFileRepository.save(sysFile);
+        // 上传文件涉及磁盘和数据库双写，落库失败时立即清理已写入文件，事务回滚时也会通过同步器清理孤儿文件。
+        SysFile saved;
+        try {
+            saved = sysFileRepository.save(sysFile);
+        } catch (RuntimeException exception) {
+            deleteFileIfExists(storagePath);
+            throw exception;
+        }
+
         return new FileUploadResponse(
                 saved.getId(),
                 saved.getOriginalName(),
                 "/api/files/" + saved.getId(),
                 saved.getSizeBytes());
+    }
+
+    @Transactional(readOnly = true)
+    public FileDownloadResource readIdPhoto(String username, Long id) {
+        requirePartyHrAppointmentManager(username);
+        SysFile sysFile = sysFileRepository.findByIdAndBusinessTypeAndDeletedFalse(id, FileBusinessTypes.ID_PHOTO)
+                .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND, "文件不存在或不可用"));
+        Path storagePath = readableStoragePath(sysFile.getStoragePath());
+        return new FileDownloadResource(storagePath, sysFile.getMimeType(), sysFile.getSizeBytes());
     }
 
     private User requirePartyHrAppointmentManager(String username) {
@@ -131,30 +155,71 @@ public class FileService {
         return originalName.substring(dotIndex).toLowerCase(Locale.ROOT);
     }
 
-    private void validateMimeAndExtension(String contentType, String extension) {
-        boolean png = "image/png".equalsIgnoreCase(contentType) && ".png".equals(extension);
+    private void validateMimeAndExtension(String contentType, String extension, DetectedImage image) {
+        boolean png = "image/png".equalsIgnoreCase(contentType)
+                && ".png".equals(extension)
+                && "image/png".equals(image.mimeType());
         boolean jpeg = "image/jpeg".equalsIgnoreCase(contentType)
-                && (".jpg".equals(extension) || ".jpeg".equals(extension));
+                && (".jpg".equals(extension) || ".jpeg".equals(extension))
+                && "image/jpeg".equals(image.mimeType());
         if (!png && !jpeg) {
             throw new BusinessException("仅支持 JPG/JPEG/PNG 图片");
         }
     }
 
-    private BufferedImage readImage(MultipartFile file) {
-        try (var input = file.getInputStream()) {
-            // 校验真实图片：不能只信任浏览器传来的 MIME 类型和扩展名。
-            BufferedImage image = ImageIO.read(input);
-            if (image == null) {
+    private DetectedImage readImageMetadata(MultipartFile file) {
+        try (var input = file.getInputStream();
+                ImageInputStream imageInput = ImageIO.createImageInputStream(input)) {
+            if (imageInput == null) {
                 throw new BusinessException("上传文件不是有效图片");
             }
-            return image;
-        } catch (IOException exception) {
+
+            // 先用 ImageReader 读取真实格式和宽高，避免完整解码超大压缩图造成内存压力。
+            Iterator<ImageReader> readers = ImageIO.getImageReaders(imageInput);
+            if (!readers.hasNext()) {
+                throw new BusinessException("上传文件不是有效图片");
+            }
+
+            ImageReader reader = readers.next();
+            try {
+                reader.setInput(imageInput, true, true);
+                return new DetectedImage(
+                        mimeTypeForFormat(reader.getFormatName()),
+                        reader.getWidth(0),
+                        reader.getHeight(0));
+            } finally {
+                reader.dispose();
+            }
+        } catch (BusinessException exception) {
+            throw exception;
+        } catch (IOException | RuntimeException exception) {
             throw new BusinessException("读取图片失败");
         }
     }
 
-    private void validateIdPhotoRatio(BufferedImage image) {
-        double ratio = image.getWidth() / (double) image.getHeight();
+    private String mimeTypeForFormat(String formatName) {
+        String normalized = formatName == null ? "" : formatName.toLowerCase(Locale.ROOT);
+        if ("png".equals(normalized)) {
+            return "image/png";
+        }
+        if ("jpg".equals(normalized) || "jpeg".equals(normalized)) {
+            return "image/jpeg";
+        }
+        throw new BusinessException("仅支持 JPG/JPEG/PNG 图片");
+    }
+
+    private void validateIdPhotoDimensions(DetectedImage image) {
+        if (image.width() <= 0 || image.height() <= 0) {
+            throw new BusinessException("上传文件不是有效图片");
+        }
+        long pixels = (long) image.width() * image.height();
+        if (image.width() > MAX_ID_PHOTO_WIDTH
+                || image.height() > MAX_ID_PHOTO_HEIGHT
+                || pixels > MAX_ID_PHOTO_PIXELS) {
+            throw new BusinessException("照片尺寸超出限制");
+        }
+
+        double ratio = image.width() / (double) image.height();
         // 限制证件照比例：一寸照片接近竖版头像，过方或过窄都拒绝。
         if (ratio < MIN_ID_PHOTO_RATIO || ratio > MAX_ID_PHOTO_RATIO) {
             throw new BusinessException("照片比例不符合一寸证件照要求");
@@ -175,6 +240,53 @@ public class FileService {
             Files.copy(file.getInputStream(), storagePath);
         } catch (IOException exception) {
             throw new BusinessException(HttpStatus.INTERNAL_SERVER_ERROR, "保存文件失败");
+        }
+    }
+
+    private void registerRollbackCleanup(Path storagePath) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            return;
+        }
+
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                if (status == STATUS_ROLLED_BACK) {
+                    deleteFileIfExists(storagePath);
+                }
+            }
+        });
+    }
+
+    private Path readableStoragePath(String storagePath) {
+        Path target;
+        try {
+            target = Path.of(storagePath).toAbsolutePath().normalize();
+        } catch (RuntimeException exception) {
+            throw new BusinessException(HttpStatus.NOT_FOUND, "文件不存在或不可用");
+        }
+
+        // 下载同样必须鉴权，并且校验真实路径仍位于上传根目录内，避免数据库路径被篡改后读取任意文件。
+        if (!target.startsWith(uploadRoot) || !Files.isRegularFile(target)) {
+            throw new BusinessException(HttpStatus.NOT_FOUND, "文件不存在或不可用");
+        }
+
+        try {
+            Path realRoot = uploadRoot.toRealPath();
+            Path realTarget = target.toRealPath();
+            if (!realTarget.startsWith(realRoot)) {
+                throw new BusinessException(HttpStatus.NOT_FOUND, "文件不存在或不可用");
+            }
+            return realTarget;
+        } catch (IOException exception) {
+            throw new BusinessException(HttpStatus.NOT_FOUND, "文件不存在或不可用");
+        }
+    }
+
+    private void deleteFileIfExists(Path path) {
+        try {
+            Files.deleteIfExists(path);
+        } catch (IOException ignored) {
         }
     }
 
@@ -200,5 +312,8 @@ public class FileService {
 
     private boolean isEnabled(User user) {
         return User.STATUS_ENABLED.equals(user.getStatus());
+    }
+
+    private record DetectedImage(String mimeType, int width, int height) {
     }
 }

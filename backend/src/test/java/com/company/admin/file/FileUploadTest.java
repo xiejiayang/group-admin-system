@@ -3,8 +3,10 @@ package com.company.admin.file;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -20,6 +22,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import javax.imageio.ImageIO;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,6 +30,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -34,16 +39,13 @@ import org.springframework.web.context.WebApplicationContext;
 import org.springframework.mock.web.MockMultipartFile;
 
 @SpringBootTest(properties = {
-        "app.upload.dir=${java.io.tmpdir}/group-admin-system-file-upload-test",
         "spring.servlet.multipart.max-file-size=3MB",
         "spring.servlet.multipart.max-request-size=3MB"
 })
 @ActiveProfiles("test")
 class FileUploadTest {
 
-    private static final Path UPLOAD_DIR = Path.of(
-            System.getProperty("java.io.tmpdir"),
-            "group-admin-system-file-upload-test");
+    private static final Path UPLOAD_DIR = createUploadDir();
 
     private MockMvc mockMvc;
 
@@ -54,6 +56,16 @@ class FileUploadTest {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @DynamicPropertySource
+    static void registerProperties(DynamicPropertyRegistry registry) {
+        registry.add("app.upload.dir", () -> UPLOAD_DIR.toString());
+    }
+
+    @AfterAll
+    static void cleanUniqueUploadDir() throws Exception {
+        deleteContents(UPLOAD_DIR, true);
+    }
 
     @BeforeEach
     void setUpMockMvc() throws Exception {
@@ -127,6 +139,31 @@ class FileUploadTest {
     }
 
     @Test
+    void rejectsPngContentDisguisedAsJpeg() throws Exception {
+        String token = loginSuperadmin().token();
+        MockMultipartFile file = imageFile("photo.jpg", MediaType.IMAGE_JPEG_VALUE, "png", 295, 413);
+
+        mockMvc.perform(multipart("/api/files/id-photo")
+                        .file(file)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false));
+    }
+
+    @Test
+    void rejectsImageWithTooManyPixels() throws Exception {
+        String token = loginSuperadmin().token();
+        MockMultipartFile file = imageFile("huge.png", MediaType.IMAGE_PNG_VALUE, "png", 3000, 4200);
+
+        assertThat(file.getSize()).isLessThanOrEqualTo(2L * 1024 * 1024);
+        mockMvc.perform(multipart("/api/files/id-photo")
+                        .file(file)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false));
+    }
+
+    @Test
     void uploadsValidPngAndJpegAndPersistsSysFile() throws Exception {
         AuthPayload superadmin = loginSuperadmin();
         assertSuccessfulUpload(
@@ -153,18 +190,56 @@ class FileUploadTest {
                 .andExpect(jsonPath("$.success").value(false));
     }
 
-    private void assertSuccessfulUpload(String token, Long expectedUploadedBy, MockMultipartFile file) throws Exception {
-        MvcResult result = mockMvc.perform(multipart("/api/files/id-photo")
-                        .file(file)
-                        .header("Authorization", "Bearer " + token))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data.id", notNullValue()))
-                .andExpect(jsonPath("$.data.originalName").value(file.getOriginalFilename()))
-                .andExpect(jsonPath("$.data.sizeBytes").value(file.getSize()))
-                .andReturn();
+    @Test
+    void uploadedIdPhotoCanBeReadWithStoredMimeType() throws Exception {
+        AuthPayload superadmin = loginSuperadmin();
+        MockMultipartFile file = imageFile("photo.png", MediaType.IMAGE_PNG_VALUE, "png", 295, 413);
+        JsonNode data = uploadAndReturnData(superadmin.token(), file);
 
-        JsonNode data = objectMapper.readTree(result.getResponse().getContentAsString()).path("data");
+        mockMvc.perform(get("/api/files/{id}", data.path("id").asLong())
+                        .header("Authorization", "Bearer " + superadmin.token()))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Type", MediaType.IMAGE_PNG_VALUE));
+    }
+
+    @Test
+    void generalAdminCannotReadIdPhoto() throws Exception {
+        AuthPayload superadmin = loginSuperadmin();
+        Long fileId = uploadAndReturnData(
+                superadmin.token(),
+                imageFile("photo.png", MediaType.IMAGE_PNG_VALUE, "png", 295, 413))
+                .path("id")
+                .asLong();
+        AuthPayload generalAdmin = registerUser("task6_general_read", "GENERAL_ADMIN");
+
+        mockMvc.perform(get("/api/files/{id}", fileId)
+                        .header("Authorization", "Bearer " + generalAdmin.token()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.success").value(false));
+    }
+
+    @Test
+    void missingStoredFileReturnsNotFound() throws Exception {
+        AuthPayload superadmin = loginSuperadmin();
+        Long fileId = uploadAndReturnData(
+                superadmin.token(),
+                imageFile("photo.png", MediaType.IMAGE_PNG_VALUE, "png", 295, 413))
+                .path("id")
+                .asLong();
+        String storagePath = jdbcTemplate.queryForObject(
+                "SELECT storage_path FROM sys_file WHERE id = ?",
+                String.class,
+                fileId);
+        Files.delete(Path.of(storagePath));
+
+        mockMvc.perform(get("/api/files/{id}", fileId)
+                        .header("Authorization", "Bearer " + superadmin.token()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.success").value(false));
+    }
+
+    private void assertSuccessfulUpload(String token, Long expectedUploadedBy, MockMultipartFile file) throws Exception {
+        JsonNode data = uploadAndReturnData(token, file);
         Long fileId = data.path("id").asLong();
         assertThat(data.path("url").asText()).isEqualTo("/api/files/" + fileId);
 
@@ -189,6 +264,20 @@ class FileUploadTest {
         assertThat(Files.exists(Path.of(stored.get("storage_path").toString()))).isTrue();
     }
 
+    private JsonNode uploadAndReturnData(String token, MockMultipartFile file) throws Exception {
+        MvcResult result = mockMvc.perform(multipart("/api/files/id-photo")
+                        .file(file)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.id", notNullValue()))
+                .andExpect(jsonPath("$.data.originalName").value(file.getOriginalFilename()))
+                .andExpect(jsonPath("$.data.sizeBytes").value(file.getSize()))
+                .andReturn();
+
+        return objectMapper.readTree(result.getResponse().getContentAsString()).path("data");
+    }
+
     private MockMultipartFile imageFile(
             String originalName,
             String contentType,
@@ -207,9 +296,24 @@ class FileUploadTest {
 
     private void cleanUploadDir() throws Exception {
         Files.createDirectories(UPLOAD_DIR);
-        try (var stream = Files.walk(UPLOAD_DIR)) {
+        deleteContents(UPLOAD_DIR, false);
+    }
+
+    private static Path createUploadDir() {
+        try {
+            return Files.createTempDirectory("group-admin-system-file-upload-test-");
+        } catch (Exception exception) {
+            throw new IllegalStateException("Failed to create isolated upload directory", exception);
+        }
+    }
+
+    private static void deleteContents(Path root, boolean deleteRoot) throws Exception {
+        if (!Files.exists(root)) {
+            return;
+        }
+        try (var stream = Files.walk(root)) {
             for (Path path : stream.sorted(Comparator.reverseOrder()).toList()) {
-                if (!path.equals(UPLOAD_DIR)) {
+                if (deleteRoot || !path.equals(root)) {
                     Files.deleteIfExists(path);
                 }
             }
