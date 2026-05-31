@@ -1,0 +1,80 @@
+import type { SystemMenu } from '@/api/system'
+
+export const SUPER_ADMIN_ROLE = 'SUPER_ADMIN'
+export const FORBIDDEN_PATH = '/forbidden'
+
+const PARTY_HR_DEPARTMENT = 'PARTY_HR'
+const GENERAL_ADMIN_DEPARTMENT = 'GENERAL_ADMIN'
+const PARTY_HR_MENU_PERMISSION = 'menu:party-hr'
+const GENERAL_ADMIN_MENU_PERMISSION = 'menu:general-admin'
+const APPOINTMENT_MANAGE_PERMISSION = 'appointment:manage'
+
+const normalizedPath = (path: string) => {
+  return path.split(/[?#]/)[0] || '/'
+}
+
+const hasAnyPermission = (permissions: string[], acceptedPermissions: string[]) => {
+  return acceptedPermissions.some((permission) => permissions.includes(permission))
+}
+
+export const defaultLandingPath = (roles: string[], menus: Pick<SystemMenu, 'path'>[] = []) => {
+  const firstMenuPath = menus.map((menuItem) => normalizedPath(menuItem.path)).find((path) => path !== '/')
+  if (firstMenuPath) {
+    return firstMenuPath
+  }
+
+  if (roles.includes(SUPER_ADMIN_ROLE)) {
+    return '/party-hr'
+  }
+
+  return FORBIDDEN_PATH
+}
+
+export const canAccessPath = (
+  path: string,
+  roles: string[],
+  permissions: string[] = [],
+  departmentCode?: string | null
+) => {
+  const targetPath = normalizedPath(path)
+
+  // 前端路由必须和后端权限/菜单一致，避免页面可进但接口返回 403。
+  if (roles.includes(SUPER_ADMIN_ROLE)) {
+    return true
+  }
+
+  if (targetPath === '/' || targetPath.startsWith(FORBIDDEN_PATH)) {
+    return true
+  }
+
+  if (targetPath.startsWith('/settings')) {
+    return false
+  }
+
+  if (targetPath.startsWith('/party-hr')) {
+    return (
+      departmentCode === PARTY_HR_DEPARTMENT &&
+      hasAnyPermission(permissions, [PARTY_HR_MENU_PERMISSION, APPOINTMENT_MANAGE_PERMISSION])
+    )
+  }
+
+  if (targetPath.startsWith('/general-admin')) {
+    return departmentCode === GENERAL_ADMIN_DEPARTMENT && permissions.includes(GENERAL_ADMIN_MENU_PERMISSION)
+  }
+
+  return true
+}
+
+export const accessibleLandingPath = (
+  roles: string[],
+  permissions: string[],
+  departmentCode: string | null | undefined,
+  menus: Pick<SystemMenu, 'path'>[] = []
+) => {
+  const landingPath = defaultLandingPath(roles, menus)
+  if (canAccessPath(landingPath, roles, permissions, departmentCode)) {
+    return landingPath
+  }
+
+  return roles.includes(SUPER_ADMIN_ROLE) ? '/party-hr' : FORBIDDEN_PATH
+}

@@ -11,9 +11,17 @@ import {
   ElTag
 } from 'element-plus'
 import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 
-import RoleAssignDialog from '@/components/settings/RoleAssignDialog.vue'
 import { fetchUsers, type SystemUser } from '@/api/system'
+import RoleAssignDialog from '@/components/settings/RoleAssignDialog.vue'
+import { accessibleLandingPath, canAccessPath } from '@/router/access'
+import { useAuthStore } from '@/stores/auth'
+import { useMenuStore } from '@/stores/menu'
+
+const router = useRouter()
+const authStore = useAuthStore()
+const menuStore = useMenuStore()
 
 const users = ref<SystemUser[]>([])
 const loading = ref(false)
@@ -22,13 +30,17 @@ const selectedUser = ref<SystemUser | null>(null)
 
 const hasUsers = computed(() => users.value.length > 0)
 
+const toMessage = (error: unknown, fallback: string) => {
+  return error instanceof Error ? error.message : fallback
+}
+
 const loadUsers = async () => {
   loading.value = true
 
   try {
     users.value = await fetchUsers()
   } catch (error) {
-    const message = error instanceof Error ? error.message : '用户列表加载失败'
+    const message = toMessage(error, '用户列表加载失败')
     ElMessage.error(message)
   } finally {
     loading.value = false
@@ -50,6 +62,49 @@ const openRoleDialog = (user: SystemUser) => {
 
 const openRoleDialogFromRow = (row: unknown) => {
   openRoleDialog(row as SystemUser)
+}
+
+const replaceUser = (updatedUser: SystemUser) => {
+  users.value = users.value.map((user) => (user.id === updatedUser.id ? updatedUser : user))
+}
+
+const syncCurrentSessionAfterRoleChange = async () => {
+  // 当前账号角色变化后必须刷新菜单和权限，避免页面可进但接口返回 403。
+  const currentUser = await authStore.loadCurrentUser()
+  const menus = await menuStore.loadMenus(true)
+  const roles = currentUser?.roles ?? []
+  const permissions = currentUser?.permissions ?? []
+  const departmentCode = currentUser?.departmentCode
+  const landingPath = accessibleLandingPath(roles, permissions, departmentCode, menus)
+
+  if (!canAccessPath(router.currentRoute.value.path, roles, permissions, departmentCode)) {
+    await router.replace(landingPath)
+    return false
+  }
+
+  return true
+}
+
+const handleRolesSaved = async (updatedUser: SystemUser) => {
+  replaceUser(updatedUser)
+
+  if (authStore.user?.userId !== updatedUser.id) {
+    await loadUsers()
+    return
+  }
+
+  try {
+    const canStayOnCurrentPage = await syncCurrentSessionAfterRoleChange()
+    if (canStayOnCurrentPage) {
+      await loadUsers()
+    }
+  } catch (error) {
+    const message = toMessage(error, '当前账号权限刷新失败，请重新登录')
+    ElMessage.error(message)
+    if (!authStore.token) {
+      await router.replace('/login')
+    }
+  }
 }
 </script>
 
@@ -100,6 +155,6 @@ const openRoleDialogFromRow = (row: unknown) => {
       <el-empty v-else description="暂无用户数据" />
     </el-card>
 
-    <role-assign-dialog v-model="dialogVisible" :user="selectedUser" @saved="loadUsers" />
+    <role-assign-dialog v-model="dialogVisible" :user="selectedUser" @saved="handleRolesSaved" />
   </section>
 </template>

@@ -1,23 +1,53 @@
 import { describe, expect, it } from 'vitest'
 
-import { canAccessPath } from './index'
+import type { SystemMenu } from '@/api/system'
+
+import { canAccessPath, defaultLandingPath } from './index'
+
+const menu = (path: string, sortOrder: number): SystemMenu => ({
+  id: sortOrder,
+  name: path,
+  path,
+  permissionCode: null,
+  sortOrder
+})
 
 describe('canAccessPath', () => {
   it('allows SUPER_ADMIN to access settings', () => {
-    expect(canAccessPath('/settings/users', ['SUPER_ADMIN'])).toBe(true)
+    expect(canAccessPath('/settings/users', ['SUPER_ADMIN'], [])).toBe(true)
   })
 
   it('blocks regular users from settings', () => {
-    expect(canAccessPath('/settings/users', ['GENERAL_ADMIN'], 'GENERAL_ADMIN')).toBe(false)
+    expect(canAccessPath('/settings/users', ['GENERAL_ADMIN_USER'], ['menu:general-admin'], 'GENERAL_ADMIN')).toBe(false)
   })
 
-  it('allows PARTY_HR to access party HR but not general admin', () => {
-    expect(canAccessPath('/party-hr', ['PARTY_HR'], 'PARTY_HR')).toBe(true)
-    expect(canAccessPath('/general-admin', ['PARTY_HR'], 'PARTY_HR')).toBe(false)
+  it('blocks PARTY_HR department users without party HR permissions from party HR', () => {
+    expect(canAccessPath('/party-hr', ['DEPARTMENT_USER'], [], 'PARTY_HR')).toBe(false)
   })
 
-  it('allows GENERAL_ADMIN to access general admin but not party HR', () => {
-    expect(canAccessPath('/general-admin', ['GENERAL_ADMIN'], 'GENERAL_ADMIN')).toBe(true)
-    expect(canAccessPath('/party-hr', ['GENERAL_ADMIN'], 'GENERAL_ADMIN')).toBe(false)
+  it('allows PARTY_HR department users with party HR permissions to access party HR but not general admin', () => {
+    expect(canAccessPath('/party-hr', ['DEPARTMENT_USER'], ['menu:party-hr'], 'PARTY_HR')).toBe(true)
+    expect(canAccessPath('/party-hr', ['DEPARTMENT_USER'], ['appointment:manage'], 'PARTY_HR')).toBe(true)
+    expect(canAccessPath('/general-admin', ['DEPARTMENT_USER'], ['menu:party-hr'], 'PARTY_HR')).toBe(false)
+  })
+
+  it('allows GENERAL_ADMIN department users with general admin menu permission to access general admin', () => {
+    expect(canAccessPath('/general-admin', ['DEPARTMENT_USER'], ['menu:general-admin'], 'GENERAL_ADMIN')).toBe(true)
+  })
+})
+
+describe('defaultLandingPath', () => {
+  it('uses the first backend menu path as the default landing path', () => {
+    expect(defaultLandingPath(['DEPARTMENT_USER'], [menu('/general-admin', 1), menu('/party-hr', 2)])).toBe(
+      '/general-admin'
+    )
+  })
+
+  it('falls back to party HR for SUPER_ADMIN without menus', () => {
+    expect(defaultLandingPath(['SUPER_ADMIN'], [])).toBe('/party-hr')
+  })
+
+  it('sends regular users without menus to forbidden', () => {
+    expect(defaultLandingPath(['DEPARTMENT_USER'], [])).toBe('/forbidden')
   })
 })

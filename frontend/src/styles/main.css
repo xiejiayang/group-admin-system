@@ -243,6 +243,29 @@ input {
   color: #1d4ed8;
 }
 
+.menu-state {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 8px 2px;
+}
+
+.menu-state .el-button {
+  width: 100%;
+}
+
+.menu-error-alert.el-alert {
+  align-items: flex-start;
+}
+
+.menu-empty-state .el-empty {
+  padding: 12px 0;
+}
+
+.menu-empty-state .el-empty__description p {
+  color: #cbd5e1;
+}
+
 .app-main-shell {
   min-width: 0;
 }
@@ -366,6 +389,12 @@ input {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
+}
+
+.role-load-error {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .role-option-list .el-checkbox {
