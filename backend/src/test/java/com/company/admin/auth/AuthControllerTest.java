@@ -152,4 +152,19 @@ class AuthControllerTest {
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.message", containsString("用户名已存在")));
     }
+
+    @Test
+    void registerWithTooLongUsernameReturnsValidationError() throws Exception {
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "username", "u".repeat(65),
+                                "password", "StrongPass123",
+                                "phone", "13500135000",
+                                "departmentCode", "PARTY_HR"))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message", containsString("长度不能超过64个字符")))
+                .andExpect(jsonPath("$.message", not(containsString("用户名已存在"))));
+    }
 }

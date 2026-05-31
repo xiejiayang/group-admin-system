@@ -75,4 +75,27 @@ class AuthServiceTest {
         assertThat(exception.getMessage()).isEqualTo("用户名已存在");
         verify(userRepository).saveAndFlush(any(User.class));
     }
+
+    @Test
+    void registerDoesNotMapOtherIntegrityErrorsToDuplicateUsername() {
+        RegisterRequest request = new RegisterRequest(
+                "valid_user",
+                "StrongPass123",
+                "13600136001",
+                "PARTY_HR");
+
+        when(userRepository.existsByUsername("valid_user")).thenReturn(false);
+        when(departmentRepository.findByCodeAndEnabledTrue("PARTY_HR")).thenReturn(Optional.of(new Department()));
+        when(roleRepository.findByCodeAndEnabledTrue("DEPARTMENT_USER")).thenReturn(Optional.of(new Role()));
+        when(roleRepository.findByCodeAndEnabledTrue("PARTY_HR_USER")).thenReturn(Optional.of(new Role()));
+        when(passwordEncoder.encode("StrongPass123")).thenReturn("encoded-password");
+        when(userRepository.saveAndFlush(any(User.class)))
+                .thenThrow(new DataIntegrityViolationException("value too long for column phone"));
+
+        DataIntegrityViolationException exception =
+                assertThrows(DataIntegrityViolationException.class, () -> authService.register(request));
+
+        assertThat(exception.getMessage()).contains("value too long");
+        verify(userRepository).saveAndFlush(any(User.class));
+    }
 }

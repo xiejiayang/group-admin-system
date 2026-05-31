@@ -15,6 +15,7 @@ import com.company.admin.system.UserRepository;
 import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -27,6 +28,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class AuthService {
 
     private static final String DEFAULT_REGISTER_ROLE = "DEPARTMENT_USER";
+    private static final String USERNAME_UNIQUE_CONSTRAINT = "uk_sys_user_username";
     private static final Map<String, String> DEPARTMENT_ROLE_CODES = Map.of(
             "PARTY_HR", "PARTY_HR_USER",
             "GENERAL_ADMIN", "GENERAL_ADMIN_USER");
@@ -95,11 +97,14 @@ public class AuthService {
         user.getRoles().add(departmentRole);
 
         try {
-            // 并发注册同名账号时，数据库唯一约束是最后兜底；这里统一转换成业务错误，避免返回 500。
             User savedUser = userRepository.saveAndFlush(user);
             return toAuthResponse(savedUser);
         } catch (DataIntegrityViolationException exception) {
-            throw new BusinessException("用户名已存在");
+            // 数据库用户名唯一约束是并发注册同名账号的最后兜底；只有确认命中该约束时才转换为业务错误。
+            if (isUsernameUniqueViolation(exception)) {
+                throw new BusinessException("用户名已存在");
+            }
+            throw exception;
         }
     }
 
@@ -145,5 +150,37 @@ public class AuthService {
 
     private BusinessException badCredentials() {
         return new BusinessException(HttpStatus.UNAUTHORIZED, "用户名或密码错误");
+    }
+
+    private boolean isUsernameUniqueViolation(DataIntegrityViolationException exception) {
+        Throwable current = exception;
+        while (current != null) {
+            if (current instanceof org.hibernate.exception.ConstraintViolationException constraintViolation
+                    && isUsernameUniqueConstraintName(constraintViolation.getConstraintName())) {
+                return true;
+            }
+            if (isUsernameUniqueMessage(current.getMessage())) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
+    }
+
+    private boolean isUsernameUniqueConstraintName(String constraintName) {
+        return constraintName != null
+                && constraintName.toLowerCase(Locale.ROOT).contains(USERNAME_UNIQUE_CONSTRAINT);
+    }
+
+    private boolean isUsernameUniqueMessage(String message) {
+        if (message == null) {
+            return false;
+        }
+        String normalized = message.toLowerCase(Locale.ROOT);
+        if (normalized.contains(USERNAME_UNIQUE_CONSTRAINT)) {
+            return true;
+        }
+        return normalized.contains("username")
+                && (normalized.contains("unique") || normalized.contains("duplicate"));
     }
 }
