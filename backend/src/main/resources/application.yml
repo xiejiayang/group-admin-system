@@ -5,6 +5,10 @@ spring:
     user:
       name: ${SPRING_SECURITY_USER_NAME:admin}
       password: ${SPRING_SECURITY_USER_PASSWORD:change-me}
+  servlet:
+    multipart:
+      max-file-size: 3MB
+      max-request-size: 3MB
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/group_admin?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true}
     username: ${SPRING_DATASOURCE_USERNAME:group_admin}
@@ -22,6 +26,8 @@ server:
   port: ${BACKEND_PORT:8080}
 
 app:
+  upload:
+    dir: ${UPLOAD_DIR:uploads}
   jwt:
     # 生产环境必须显式配置 JWT_SECRET，禁止在主配置中保留可部署生效的默认密钥。
     secret: ${JWT_SECRET}
