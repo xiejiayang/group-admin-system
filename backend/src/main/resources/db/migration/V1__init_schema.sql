@@ -169,7 +169,7 @@ INSERT INTO sys_permission(code, name, description) VALUES
 ('menu:party-hr', '党群人力部菜单', '访问党群人力部看板'),
 ('menu:general-admin', '综合管理部菜单', '访问综合管理部页面'),
 ('menu:settings', '设置菜单', '访问系统设置页面'),
-('appointment:manage', '任免管理', '管理任免审批记录'),
+('appointment:manage', '任免审批管理', '管理任免审批记录'),
 ('system:user-role', '用户角色分配', '维护用户角色关系');
 
 -- 菜单初始化：菜单由后端返回给前端渲染，路径需与前端路由保持一致。
