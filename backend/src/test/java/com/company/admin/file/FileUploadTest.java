@@ -1,6 +1,7 @@
 package com.company.admin.file;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -21,6 +22,7 @@ import java.util.Comparator;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.util.zip.CRC32;
 import javax.imageio.ImageIO;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -118,6 +120,49 @@ class FileUploadTest {
                 "fake.png",
                 MediaType.IMAGE_PNG_VALUE,
                 "not really an image".getBytes(StandardCharsets.UTF_8));
+
+        mockMvc.perform(multipart("/api/files/id-photo")
+                        .file(file)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false));
+    }
+
+    @Test
+    void rejectsHeaderOnlyPngThatCannotBeFullyDecoded() throws Exception {
+        String token = loginSuperadmin().token();
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "photo.png",
+                MediaType.IMAGE_PNG_VALUE,
+                headerOnlyPng(295, 413));
+
+        mockMvc.perform(multipart("/api/files/id-photo")
+                        .file(file)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false));
+    }
+
+    @Test
+    void rejectsUploadWithoutFilePart() throws Exception {
+        String token = loginSuperadmin().token();
+
+        mockMvc.perform(multipart("/api/files/id-photo")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message", containsString("文件")));
+    }
+
+    @Test
+    void rejectsEmptyFilePart() throws Exception {
+        String token = loginSuperadmin().token();
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "photo.png",
+                MediaType.IMAGE_PNG_VALUE,
+                new byte[0]);
 
         mockMvc.perform(multipart("/api/files/id-photo")
                         .file(file)
@@ -288,6 +333,45 @@ class FileUploadTest {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         ImageIO.write(image, formatName, out);
         return new MockMultipartFile("file", originalName, contentType, out.toByteArray());
+    }
+
+    private byte[] headerOnlyPng(int width, int height) {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        out.writeBytes(new byte[] {(byte) 137, 80, 78, 71, 13, 10, 26, 10});
+        byte[] ihdr = new byte[13];
+        writeInt(ihdr, 0, width);
+        writeInt(ihdr, 4, height);
+        ihdr[8] = 8;
+        ihdr[9] = 2;
+        writePngChunk(out, "IHDR", ihdr);
+        writePngChunk(out, "IEND", new byte[0]);
+        return out.toByteArray();
+    }
+
+    private void writePngChunk(ByteArrayOutputStream out, String type, byte[] data) {
+        byte[] typeBytes = type.getBytes(StandardCharsets.US_ASCII);
+        writeInt(out, data.length);
+        out.writeBytes(typeBytes);
+        out.writeBytes(data);
+
+        CRC32 crc = new CRC32();
+        crc.update(typeBytes);
+        crc.update(data);
+        writeInt(out, (int) crc.getValue());
+    }
+
+    private void writeInt(ByteArrayOutputStream out, int value) {
+        out.write((value >>> 24) & 0xff);
+        out.write((value >>> 16) & 0xff);
+        out.write((value >>> 8) & 0xff);
+        out.write(value & 0xff);
+    }
+
+    private void writeInt(byte[] target, int offset, int value) {
+        target[offset] = (byte) ((value >>> 24) & 0xff);
+        target[offset + 1] = (byte) ((value >>> 16) & 0xff);
+        target[offset + 2] = (byte) ((value >>> 8) & 0xff);
+        target[offset + 3] = (byte) (value & 0xff);
     }
 
     private String extension(String filename) {

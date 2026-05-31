@@ -9,6 +9,7 @@ import com.company.admin.system.Permission;
 import com.company.admin.system.Role;
 import com.company.admin.system.User;
 import com.company.admin.system.UserRepository;
+import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -65,6 +66,7 @@ public class FileService {
         DetectedImage image = readImageMetadata(file);
         validateMimeAndExtension(file.getContentType(), extension, image);
         validateIdPhotoDimensions(image);
+        validateImageCanDecode(file);
 
         String storedName = UUID.randomUUID() + extension;
         Path storagePath = storagePath(storedName);
@@ -174,7 +176,7 @@ public class FileService {
                 throw new BusinessException("上传文件不是有效图片");
             }
 
-            // 先用 ImageReader 读取真实格式和宽高，避免完整解码超大压缩图造成内存压力。
+            // 元数据预检只读取真实格式和宽高，低成本过滤格式/尺寸并避免直接解码超大压缩图。
             Iterator<ImageReader> readers = ImageIO.getImageReaders(imageInput);
             if (!readers.hasNext()) {
                 throw new BusinessException("上传文件不是有效图片");
@@ -194,6 +196,20 @@ public class FileService {
             throw exception;
         } catch (IOException | RuntimeException exception) {
             throw new BusinessException("读取图片失败");
+        }
+    }
+
+    private void validateImageCanDecode(MultipartFile file) {
+        // 完整解码使用新的输入流读取像素数据，用于拒绝只有头信息但内容损坏的图片。
+        try (var input = file.getInputStream()) {
+            BufferedImage decodedImage = ImageIO.read(input);
+            if (decodedImage == null) {
+                throw new BusinessException("上传文件不是有效图片");
+            }
+        } catch (BusinessException exception) {
+            throw exception;
+        } catch (IOException | RuntimeException exception) {
+            throw new BusinessException("上传文件不是有效图片");
         }
     }
 
