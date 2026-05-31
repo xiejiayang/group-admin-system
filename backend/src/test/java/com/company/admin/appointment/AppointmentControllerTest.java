@@ -1,5 +1,7 @@
 package com.company.admin.appointment;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.notNullValue;
@@ -53,7 +55,14 @@ class AppointmentControllerTest {
         jdbcTemplate.update("""
                 INSERT INTO sys_file(
                     id, original_name, stored_name, storage_path, mime_type, size_bytes, business_type
-                ) VALUES (1, 'photo.jpg', 'photo.jpg', '/tmp/photo.jpg', 'image/jpeg', 1024, 'appointment_photo')
+                ) VALUES (1, 'photo.jpg', 'photo.jpg', '/tmp/photo.jpg', 'image/jpeg', 1024, 'ID_PHOTO')
+                """);
+        jdbcTemplate.update("""
+                INSERT INTO sys_file(
+                    id, original_name, stored_name, storage_path, mime_type, size_bytes, business_type, deleted
+                ) VALUES
+                (2, 'deleted.jpg', 'deleted.jpg', '/tmp/deleted.jpg', 'image/jpeg', 1024, 'ID_PHOTO', TRUE),
+                (3, 'other.jpg', 'other.jpg', '/tmp/other.jpg', 'image/jpeg', 1024, 'OTHER', FALSE)
                 """);
     }
 
@@ -184,6 +193,114 @@ class AppointmentControllerTest {
                 .andExpect(jsonPath("$.data.total").value(0));
     }
 
+    @Test
+    void rejectsTooLongAppointmentBaseFieldBeforeDatabaseConstraint() throws Exception {
+        String token = loginSuperadmin().token();
+        Map<String, Object> request = mutableCreateRequest();
+        request.put("name", "a".repeat(65));
+
+        mockMvc.perform(post("/api/party-hr/appointments")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message", containsString("name")))
+                .andExpect(jsonPath("$.message", not(containsString("DataIntegrity"))))
+                .andExpect(jsonPath("$.message", not(containsString("constraint"))));
+    }
+
+    @Test
+    void rejectsTooLongNestedFamilyMemberFieldBeforeDatabaseConstraint() throws Exception {
+        String token = loginSuperadmin().token();
+        Map<String, Object> request = mutableCreateRequest();
+        request.put("familyMembers", List.of(
+                familyMember("r".repeat(65), "n".repeat(65), 151, "p".repeat(81), "w".repeat(256), -1)));
+
+        mockMvc.perform(post("/api/party-hr/appointments")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message", containsString("familyMembers")))
+                .andExpect(jsonPath("$.message", not(containsString("DataIntegrity"))))
+                .andExpect(jsonPath("$.message", not(containsString("constraint"))));
+    }
+
+    @Test
+    void rejectsInvalidPhotoFileIdBeforeForeignKeyConstraint() throws Exception {
+        String token = loginSuperadmin().token();
+
+        assertInvalidPhotoFileIdRejected(token, 999L);
+        assertInvalidPhotoFileIdRejected(token, 2L);
+        assertInvalidPhotoFileIdRejected(token, 3L);
+    }
+
+    @Test
+    void generalAdminCannotCreateUpdateOrDeleteAppointmentRecord() throws Exception {
+        String superadminToken = loginSuperadmin().token();
+        Long appointmentId = createAppointment(superadminToken, createRequest("audited-user", "reason", List.of()));
+        AuthPayload generalAdmin = registerUser("task5_general_mutation", "GENERAL_ADMIN");
+
+        mockMvc.perform(post("/api/party-hr/appointments")
+                        .header("Authorization", "Bearer " + generalAdmin.token())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(mutableCreateRequest())))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.success").value(false));
+
+        mockMvc.perform(put("/api/party-hr/appointments/{id}", appointmentId)
+                        .header("Authorization", "Bearer " + generalAdmin.token())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(mutableCreateRequest())))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.success").value(false));
+
+        mockMvc.perform(delete("/api/party-hr/appointments/{id}", appointmentId)
+                        .header("Authorization", "Bearer " + generalAdmin.token()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.success").value(false));
+    }
+
+    @Test
+    void duplicateDeleteReturnsUnifiedNotFoundResponse() throws Exception {
+        String token = loginSuperadmin().token();
+        Long appointmentId = createAppointment(token, createRequest("delete-twice", "reason", List.of()));
+
+        mockMvc.perform(delete("/api/party-hr/appointments/{id}", appointmentId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
+
+        mockMvc.perform(delete("/api/party-hr/appointments/{id}", appointmentId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.success").value(false));
+    }
+
+    @Test
+    void updateReplacesFamilyMembersWithoutLeavingOldRowsAndWritesAuditColumns() throws Exception {
+        AuthPayload superadmin = loginSuperadmin();
+        Long appointmentId = createAppointment(superadmin.token(), createRequest("audited-user", "reason", List.of(
+                familyMember("spouse", "old-family", 35, "mass", "office", 1))));
+
+        assertAppointmentAudit(appointmentId, superadmin.id(), superadmin.id());
+
+        mockMvc.perform(put("/api/party-hr/appointments/{id}", appointmentId)
+                        .header("Authorization", "Bearer " + superadmin.token())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(createRequest("audited-user", "updated", List.of(
+                                familyMember("father", "new-family-1", 66, "party", "retired", 1),
+                                familyMember("mother", "new-family-2", 64, "mass", "retired", 2))))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
+
+        assertAppointmentAudit(appointmentId, superadmin.id(), superadmin.id());
+        assertThat(countFamilyMembers(appointmentId)).isEqualTo(2);
+        assertThat(countFamilyMembersByName(appointmentId, "old-family")).isZero();
+    }
+
     private Long createAppointment(String token, Map<String, Object> request) throws Exception {
         MvcResult result = mockMvc.perform(post("/api/party-hr/appointments")
                         .header("Authorization", "Bearer " + token)
@@ -195,6 +312,48 @@ class AppointmentControllerTest {
                 .andReturn();
 
         return objectMapper.readTree(result.getResponse().getContentAsString()).path("data").path("id").asLong();
+    }
+
+    private void assertInvalidPhotoFileIdRejected(String token, Long photoFileId) throws Exception {
+        Map<String, Object> request = mutableCreateRequest();
+        request.put("photoFileId", photoFileId);
+
+        mockMvc.perform(post("/api/party-hr/appointments")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message", containsString("照片文件")));
+    }
+
+    private void assertAppointmentAudit(Long appointmentId, Long createdBy, Long updatedBy) {
+        Map<String, Object> audit = jdbcTemplate.queryForMap(
+                "SELECT created_by, updated_by FROM appointment_record WHERE id = ?", appointmentId);
+
+        assertThat(((Number) audit.get("created_by")).longValue()).isEqualTo(createdBy);
+        assertThat(((Number) audit.get("updated_by")).longValue()).isEqualTo(updatedBy);
+    }
+
+    private int countFamilyMembers(Long appointmentId) {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM appointment_family_member WHERE appointment_record_id = ?",
+                Integer.class,
+                appointmentId);
+        return count == null ? 0 : count;
+    }
+
+    private int countFamilyMembersByName(Long appointmentId, String name) {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM appointment_family_member WHERE appointment_record_id = ? AND name = ?",
+                Integer.class,
+                appointmentId,
+                name);
+        return count == null ? 0 : count;
+    }
+
+    private Map<String, Object> mutableCreateRequest() {
+        return new java.util.LinkedHashMap<>(createRequest("valid-user", "reason", List.of()));
     }
 
     private Map<String, Object> createRequest(

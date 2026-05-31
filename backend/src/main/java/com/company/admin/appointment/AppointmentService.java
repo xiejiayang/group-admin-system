@@ -7,6 +7,8 @@ import com.company.admin.appointment.dto.AppointmentPageResponse;
 import com.company.admin.appointment.dto.AppointmentRecordRequest;
 import com.company.admin.appointment.dto.AppointmentSummaryResponse;
 import com.company.admin.common.BusinessException;
+import com.company.admin.file.FileBusinessTypes;
+import com.company.admin.file.SysFileRepository;
 import com.company.admin.system.Department;
 import com.company.admin.system.DepartmentAccessPolicy;
 import com.company.admin.system.Permission;
@@ -34,12 +36,15 @@ public class AppointmentService {
 
     private final AppointmentRecordRepository appointmentRecordRepository;
     private final UserRepository userRepository;
+    private final SysFileRepository sysFileRepository;
 
     public AppointmentService(
             AppointmentRecordRepository appointmentRecordRepository,
-            UserRepository userRepository) {
+            UserRepository userRepository,
+            SysFileRepository sysFileRepository) {
         this.appointmentRecordRepository = appointmentRecordRepository;
         this.userRepository = userRepository;
+        this.sysFileRepository = sysFileRepository;
     }
 
     @Transactional(readOnly = true)
@@ -122,6 +127,8 @@ public class AppointmentService {
     }
 
     private void mapEditableFields(AppointmentRecord record, AppointmentRecordRequest request) {
+        validatePhotoFile(request.photoFileId());
+
         record.setName(request.name());
         record.setPhone(request.phone());
         record.setIdCard(request.idCard());
@@ -159,6 +166,19 @@ public class AppointmentService {
         record.setAdministrativeAppointmentDate(request.administrativeAppointmentDate());
         record.setFormFiller(request.formFiller());
         record.setPhotoFileId(request.photoFileId());
+    }
+
+    private void validatePhotoFile(Long photoFileId) {
+        if (photoFileId == null) {
+            return;
+        }
+        // 照片文件由上传模块统一管理，任免表只引用已校验文件，避免直接依赖外键暴露数据库异常。
+        boolean validPhoto = sysFileRepository.existsByIdAndBusinessTypeAndDeletedFalse(
+                photoFileId,
+                FileBusinessTypes.ID_PHOTO);
+        if (!validPhoto) {
+            throw new BusinessException("照片文件不存在或不可用");
+        }
     }
 
     private void replaceFamilyMembers(
