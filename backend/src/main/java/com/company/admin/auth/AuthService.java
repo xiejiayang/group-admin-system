@@ -6,6 +6,7 @@ import com.company.admin.auth.dto.RegisterRequest;
 import com.company.admin.common.BusinessException;
 import com.company.admin.security.JwtService;
 import com.company.admin.system.Department;
+import com.company.admin.system.DepartmentAccessPolicy;
 import com.company.admin.system.DepartmentRepository;
 import com.company.admin.system.Permission;
 import com.company.admin.system.Role;
@@ -16,8 +17,6 @@ import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
-import java.util.Set;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -27,30 +26,28 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class AuthService {
 
-    private static final String DEFAULT_REGISTER_ROLE = "DEPARTMENT_USER";
     private static final String USERNAME_UNIQUE_CONSTRAINT = "uk_sys_user_username";
-    private static final Map<String, String> DEPARTMENT_ROLE_CODES = Map.of(
-            "PARTY_HR", "PARTY_HR_USER",
-            "GENERAL_ADMIN", "GENERAL_ADMIN_USER");
-    private static final Set<String> REGISTER_DEPARTMENT_CODES = DEPARTMENT_ROLE_CODES.keySet();
 
     private final UserRepository userRepository;
     private final DepartmentRepository departmentRepository;
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
+    private final DepartmentAccessPolicy departmentAccessPolicy;
 
     public AuthService(
             UserRepository userRepository,
             DepartmentRepository departmentRepository,
             RoleRepository roleRepository,
             PasswordEncoder passwordEncoder,
-            JwtService jwtService) {
+            JwtService jwtService,
+            DepartmentAccessPolicy departmentAccessPolicy) {
         this.userRepository = userRepository;
         this.departmentRepository = departmentRepository;
         this.roleRepository = roleRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
+        this.departmentAccessPolicy = departmentAccessPolicy;
     }
 
     @Transactional
@@ -70,7 +67,7 @@ public class AuthService {
 
     @Transactional
     public AuthResponse register(RegisterRequest request) {
-        if (!REGISTER_DEPARTMENT_CODES.contains(request.departmentCode())) {
+        if (!departmentAccessPolicy.registerDepartmentCodes().contains(request.departmentCode())) {
             throw new BusinessException("部门只能选择党群人力部或综合管理部");
         }
         if (userRepository.existsByUsername(request.username())) {
@@ -79,9 +76,11 @@ public class AuthService {
 
         Department department = departmentRepository.findByCodeAndEnabledTrue(request.departmentCode())
                 .orElseThrow(() -> new BusinessException("部门不存在或已停用"));
-        Role defaultRole = roleRepository.findByCodeAndEnabledTrue(DEFAULT_REGISTER_ROLE)
+        Role defaultRole = roleRepository.findByCodeAndEnabledTrue(departmentAccessPolicy.defaultDepartmentRoleCode())
                 .orElseThrow(() -> new BusinessException("默认角色不存在或已停用"));
-        Role departmentRole = roleRepository.findByCodeAndEnabledTrue(DEPARTMENT_ROLE_CODES.get(request.departmentCode()))
+        String departmentRoleCode = departmentAccessPolicy.departmentRoleCode(request.departmentCode())
+                .orElseThrow(() -> new BusinessException("部门细分角色不存在或已停用"));
+        Role departmentRole = roleRepository.findByCodeAndEnabledTrue(departmentRoleCode)
                 .orElseThrow(() -> new BusinessException("部门细分角色不存在或已停用"));
 
         User user = new User();

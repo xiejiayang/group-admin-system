@@ -13,6 +13,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.Map;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -58,7 +59,7 @@ class AuthControllerTest {
 
     @Test
     void departmentUserCanRegisterAndReadCurrentUserWithReturnedToken() throws Exception {
-        String username = "party_hr_user";
+        String username = uniqueUsername("party_hr_user");
 
         String registerBody = mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -100,16 +101,18 @@ class AuthControllerTest {
 
     @Test
     void generalAdminUserOnlyReceivesGeneralAdminPermissions() throws Exception {
+        String username = uniqueUsername("general_admin_user");
+
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(
-                                "username", "general_admin_user",
+                                "username", username,
                                 "password", "StrongPass123",
                                 "phone", "13700137000",
                                 "departmentCode", "GENERAL_ADMIN"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data.username").value("general_admin_user"))
+                .andExpect(jsonPath("$.data.username").value(username))
                 .andExpect(jsonPath("$.data.departmentCode").value("GENERAL_ADMIN"))
                 .andExpect(jsonPath("$.data.roles", hasItem("DEPARTMENT_USER")))
                 .andExpect(jsonPath("$.data.roles", hasItem("GENERAL_ADMIN_USER")))
@@ -133,8 +136,9 @@ class AuthControllerTest {
 
     @Test
     void duplicateUsernameRegistrationReturnsBusinessError() throws Exception {
+        String username = uniqueUsername("duplicate_user");
         Map<String, String> request = Map.of(
-                "username", "duplicate_user",
+                "username", username,
                 "password", "StrongPass123",
                 "phone", "13900139000",
                 "departmentCode", "GENERAL_ADMIN");
@@ -166,5 +170,9 @@ class AuthControllerTest {
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.message", containsString("长度不能超过64个字符")))
                 .andExpect(jsonPath("$.message", not(containsString("用户名已存在"))));
+    }
+
+    private String uniqueUsername(String prefix) {
+        return prefix + "_" + UUID.randomUUID().toString().replace("-", "").substring(0, 8);
     }
 }

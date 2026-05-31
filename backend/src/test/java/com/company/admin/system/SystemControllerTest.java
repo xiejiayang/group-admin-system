@@ -115,7 +115,7 @@ class SystemControllerTest {
     }
 
     @Test
-    void superadminCanAssignRolesToOrdinaryUser() throws Exception {
+    void superadminCanAssignCompatibleRolesToOrdinaryUser() throws Exception {
         String token = loginSuperadmin().token();
         AuthPayload user = registerUser("task4_assign", "PARTY_HR");
 
@@ -123,13 +123,67 @@ class SystemControllerTest {
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(
-                                "roleCodes", java.util.List.of("DEPARTMENT_USER", "GENERAL_ADMIN_USER")))))
+                                "roleCodes", java.util.List.of("DEPARTMENT_USER", "PARTY_HR_USER")))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.id").value(user.id()))
                 .andExpect(jsonPath("$.data.roles", hasItem("DEPARTMENT_USER")))
-                .andExpect(jsonPath("$.data.roles", hasItem("GENERAL_ADMIN_USER")))
-                .andExpect(jsonPath("$.data.roles", not(hasItem("PARTY_HR_USER"))));
+                .andExpect(jsonPath("$.data.roles", hasItem("PARTY_HR_USER")))
+                .andExpect(jsonPath("$.data.roles", not(hasItem("GENERAL_ADMIN_USER"))));
+    }
+
+    @Test
+    void cannotAssignCrossDepartmentRoleToOrdinaryUser() throws Exception {
+        String token = loginSuperadmin().token();
+        AuthPayload user = registerUser("task4_cross_assign", "PARTY_HR");
+
+        mockMvc.perform(put("/api/system/users/{userId}/roles", user.id())
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "roleCodes", java.util.List.of("DEPARTMENT_USER", "GENERAL_ADMIN_USER")))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false));
+    }
+
+    @Test
+    void cannotAssignBothDepartmentSpecificRolesToOrdinaryUser() throws Exception {
+        String token = loginSuperadmin().token();
+        AuthPayload user = registerUser("task4_mixed_assign", "GENERAL_ADMIN");
+
+        mockMvc.perform(put("/api/system/users/{userId}/roles", user.id())
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "roleCodes", java.util.List.of(
+                                        "DEPARTMENT_USER",
+                                        "PARTY_HR_USER",
+                                        "GENERAL_ADMIN_USER")))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false));
+    }
+
+    @Test
+    void ordinaryUserCannotReadSystemRoles() throws Exception {
+        AuthPayload user = registerUser("task4_roles_forbidden", "GENERAL_ADMIN");
+
+        mockMvc.perform(get("/api/system/roles")
+                        .header("Authorization", "Bearer " + user.token()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.success").value(false));
+    }
+
+    @Test
+    void ordinaryUserCannotAssignRoles() throws Exception {
+        AuthPayload user = registerUser("task4_assign_forbidden", "PARTY_HR");
+
+        mockMvc.perform(put("/api/system/users/{userId}/roles", user.id())
+                        .header("Authorization", "Bearer " + user.token())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "roleCodes", java.util.List.of("DEPARTMENT_USER", "PARTY_HR_USER")))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.success").value(false));
     }
 
     @Test

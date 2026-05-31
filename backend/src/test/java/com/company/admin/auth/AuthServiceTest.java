@@ -10,6 +10,7 @@ import com.company.admin.auth.dto.RegisterRequest;
 import com.company.admin.common.BusinessException;
 import com.company.admin.security.JwtService;
 import com.company.admin.system.Department;
+import com.company.admin.system.DepartmentAccessPolicy;
 import com.company.admin.system.DepartmentRepository;
 import com.company.admin.system.Role;
 import com.company.admin.system.RoleRepository;
@@ -51,7 +52,8 @@ class AuthServiceTest {
                 departmentRepository,
                 roleRepository,
                 passwordEncoder,
-                jwtService);
+                jwtService,
+                new DepartmentAccessPolicy());
     }
 
     @Test

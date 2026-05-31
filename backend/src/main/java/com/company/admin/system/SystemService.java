@@ -19,22 +19,20 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class SystemService {
 
-    private static final String SUPER_ADMIN_ROLE = "SUPER_ADMIN";
-    private static final Map<String, String> DEPARTMENT_MENU_PERMISSIONS = Map.of(
-            "PARTY_HR", "menu:party-hr",
-            "GENERAL_ADMIN", "menu:general-admin");
-
     private final MenuRepository menuRepository;
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
+    private final DepartmentAccessPolicy departmentAccessPolicy;
 
     public SystemService(
             MenuRepository menuRepository,
             UserRepository userRepository,
-            RoleRepository roleRepository) {
+            RoleRepository roleRepository,
+            DepartmentAccessPolicy departmentAccessPolicy) {
         this.menuRepository = menuRepository;
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
+        this.departmentAccessPolicy = departmentAccessPolicy;
     }
 
     @Transactional(readOnly = true)
@@ -89,11 +87,18 @@ public class SystemService {
             throw new BusinessException("角色不存在或已停用: " + String.join(",", missingCodes));
         }
 
-        boolean removingSuperAdmin = hasRole(user, SUPER_ADMIN_ROLE) && !requestedCodes.contains(SUPER_ADMIN_ROLE);
-        // 超级管理员保底规则：禁止移除系统中最后一个 SUPER_ADMIN，避免系统无人可管理。
-        if (removingSuperAdmin && userRepository.countEnabledUsersWithRoleCode(SUPER_ADMIN_ROLE) <= 1) {
-            throw new BusinessException("至少保留一个超级管理员");
+        boolean removingSuperAdmin = isEnabled(user)
+                && hasRole(user, DepartmentAccessPolicy.SUPER_ADMIN_ROLE)
+                && !requestedCodes.contains(DepartmentAccessPolicy.SUPER_ADMIN_ROLE);
+        if (removingSuperAdmin) {
+            List<User> lockedSuperAdmins =
+                    userRepository.lockEnabledUsersWithRoleCode(DepartmentAccessPolicy.SUPER_ADMIN_ROLE);
+            // 事务内悲观锁定现有超级管理员，避免并发移除导致系统无人可管理。
+            if (lockedSuperAdmins.size() <= 1) {
+                throw new BusinessException("至少保留一个超级管理员");
+            }
         }
+        departmentAccessPolicy.validateRoleAssignment(user, requestedCodes);
 
         user.getRoles().clear();
         requestedCodes.stream()
@@ -103,13 +108,14 @@ public class SystemService {
     }
 
     private Set<String> visibleMenuPermissionCodes(User user, Set<String> permissionCodes) {
-        if (hasRole(user, SUPER_ADMIN_ROLE)) {
+        if (hasRole(user, DepartmentAccessPolicy.SUPER_ADMIN_ROLE)) {
             return permissionCodes;
         }
 
         Department department = user.getDepartment();
         String departmentCode = department == null ? null : department.getCode();
-        String departmentMenuPermission = DEPARTMENT_MENU_PERMISSIONS.get(departmentCode);
+        String departmentMenuPermission = departmentAccessPolicy.departmentMenuPermissionCode(departmentCode)
+                .orElse(null);
         if (departmentMenuPermission == null || !permissionCodes.contains(departmentMenuPermission)) {
             return Set.of();
         }

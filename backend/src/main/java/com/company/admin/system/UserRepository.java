@@ -1,9 +1,11 @@
 package com.company.admin.system;
 
+import jakarta.persistence.LockModeType;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -18,8 +20,10 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @EntityGraph(attributePaths = {"department", "roles"})
     Optional<User> findByIdAndDeletedFalse(Long id);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @EntityGraph(attributePaths = {"roles"})
     @Query("""
-            SELECT COUNT(DISTINCT u.id)
+            SELECT DISTINCT u
             FROM User u
             JOIN u.roles r
             WHERE u.deleted = false
@@ -27,7 +31,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
               AND r.enabled = true
               AND r.code = :roleCode
             """)
-    long countEnabledUsersWithRoleCode(@Param("roleCode") String roleCode);
+    List<User> lockEnabledUsersWithRoleCode(@Param("roleCode") String roleCode);
 
     boolean existsByUsername(String username);
 }
