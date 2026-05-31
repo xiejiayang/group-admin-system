@@ -11,13 +11,14 @@ import {
   type FormRules
 } from 'element-plus'
 import { reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 
 import gateUrl from '@/assets/group-gate.png'
 import type { AuthUser } from '@/api/auth'
 import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
+const route = useRoute()
 const formRef = ref<FormInstance>()
 const loading = ref(false)
 const form = reactive({
@@ -48,6 +49,20 @@ const landingPath = (user: AuthUser) => {
   return '/party-hr'
 }
 
+const resolveInternalRedirect = (redirect: unknown) => {
+  if (typeof redirect !== 'string') {
+    return null
+  }
+
+  const path = redirect.trim()
+
+  if (!path.startsWith('/') || path.startsWith('//') || /[a-z][a-z\d+\-.]*:\/\//i.test(path)) {
+    return null
+  }
+
+  return path
+}
+
 const handleLogin = async () => {
   const valid = await formRef.value?.validate().catch(() => false)
 
@@ -64,7 +79,9 @@ const handleLogin = async () => {
       password: form.password
     })
 
-    await router?.push(landingPath(user))
+    // 只允许登录前记录的站内路径，避免开放重定向到外部站点。
+    const redirectPath = resolveInternalRedirect(route.query.redirect)
+    await router?.push(redirectPath ?? landingPath(user))
   } catch (error) {
     const message = error instanceof Error ? error.message : '登录失败，请稍后重试'
     ElMessage.error(message)
