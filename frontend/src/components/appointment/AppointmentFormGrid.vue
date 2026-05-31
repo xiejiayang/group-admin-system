@@ -1,0 +1,477 @@
+<script setup lang="ts">
+import { CirclePlus, Delete } from '@element-plus/icons-vue'
+import {
+  ElButton,
+  ElDatePicker,
+  ElInput,
+  ElInputNumber,
+  ElTable,
+  ElTableColumn
+} from 'element-plus'
+import { computed, nextTick, ref, watch } from 'vue'
+
+import PhotoUploader from './PhotoUploader.vue'
+
+import {
+  createEmptyFamilyMember,
+  normalizeAppointmentForm,
+  type AppointmentFormMode,
+  type AppointmentFormModel,
+  type AppointmentFormPayload
+} from '@/types/appointment'
+
+const props = withDefaults(
+  defineProps<{
+    modelValue: AppointmentFormModel
+    mode?: AppointmentFormMode
+    readonly?: boolean
+  }>(),
+  {
+    mode: 'edit',
+    readonly: undefined
+  }
+)
+
+const emit = defineEmits<{
+  'update:modelValue': [value: AppointmentFormPayload]
+}>()
+
+// 表单字段按后端 AppointmentRecordRequest 命名，界面标签保持任免审批表和看板列的中文语义。
+const form = ref<AppointmentFormPayload>(normalizeAppointmentForm(props.modelValue))
+const applyingExternalValue = ref(false)
+
+// view 模式通过同一套网格禁用输入，create/edit 模式保持双向回填供弹窗保存。
+const isReadonly = computed(() => props.readonly ?? props.mode === 'view')
+
+watch(
+  () => props.modelValue,
+  async (value) => {
+    applyingExternalValue.value = true
+    form.value = normalizeAppointmentForm(value)
+    await nextTick()
+    applyingExternalValue.value = false
+  },
+  { deep: true, immediate: true }
+)
+
+watch(
+  form,
+  (value) => {
+    if (!applyingExternalValue.value) {
+      emit('update:modelValue', normalizeAppointmentForm(value))
+    }
+  },
+  { deep: true }
+)
+
+const addFamilyMember = () => {
+  form.value.familyMembers.push(createEmptyFamilyMember(form.value.familyMembers.length + 1))
+}
+
+const removeFamilyMember = (index: number) => {
+  if (form.value.familyMembers.length === 1) {
+    form.value.familyMembers = [createEmptyFamilyMember()]
+    return
+  }
+
+  form.value.familyMembers.splice(index, 1)
+  form.value.familyMembers.forEach((member, memberIndex) => {
+    member.sortOrder = memberIndex + 1
+  })
+}
+</script>
+
+<template>
+  <section class="appointment-form-grid" :class="{ 'is-readonly': isReadonly }">
+    <h2>任免审批表</h2>
+
+    <div class="approval-table-shell">
+      <table class="approval-table">
+        <colgroup>
+          <col class="label-col" />
+          <col class="value-col" />
+          <col class="label-col" />
+          <col class="value-col" />
+          <col class="label-col" />
+          <col class="value-col" />
+          <col class="label-col" />
+          <col class="value-col" />
+        </colgroup>
+        <tbody>
+          <tr>
+            <th>姓名</th>
+            <td><el-input v-model="form.name" :disabled="isReadonly" /></td>
+            <th>性别</th>
+            <td><el-input v-model="form.gender" :disabled="isReadonly" /></td>
+            <th>出生年月</th>
+            <td>
+              <el-date-picker
+                v-model="form.birthDate"
+                :disabled="isReadonly"
+                format="YYYY-MM-DD"
+                placeholder="选择日期"
+                type="date"
+                value-format="YYYY-MM-DD"
+              />
+            </td>
+            <td class="photo-cell" colspan="2" rowspan="4">
+              <photo-uploader v-model="form.photoFileId" :readonly="isReadonly" />
+            </td>
+          </tr>
+
+          <tr>
+            <th>民族</th>
+            <td><el-input v-model="form.ethnicity" :disabled="isReadonly" /></td>
+            <th>籍贯</th>
+            <td><el-input v-model="form.nativePlace" :disabled="isReadonly" /></td>
+            <th>出生地</th>
+            <td><el-input v-model="form.birthPlace" :disabled="isReadonly" /></td>
+          </tr>
+
+          <tr>
+            <th>入党时间</th>
+            <td>
+              <el-date-picker
+                v-model="form.partyJoinDate"
+                :disabled="isReadonly"
+                format="YYYY-MM-DD"
+                placeholder="选择日期"
+                type="date"
+                value-format="YYYY-MM-DD"
+              />
+            </td>
+            <th>参加工作时间</th>
+            <td>
+              <el-date-picker
+                v-model="form.workStartDate"
+                :disabled="isReadonly"
+                format="YYYY-MM-DD"
+                placeholder="选择日期"
+                type="date"
+                value-format="YYYY-MM-DD"
+              />
+            </td>
+            <th>健康状况</th>
+            <td><el-input v-model="form.healthStatus" :disabled="isReadonly" /></td>
+          </tr>
+
+          <tr>
+            <th>专业技术职务</th>
+            <td><el-input v-model="form.technicalPosition" :disabled="isReadonly" /></td>
+            <th>熟悉专业有何专长</th>
+            <td colspan="3"><el-input v-model="form.specialty" :disabled="isReadonly" /></td>
+          </tr>
+
+          <tr>
+            <th>电话</th>
+            <td><el-input v-model="form.phone" :disabled="isReadonly" /></td>
+            <th>身份证号</th>
+            <td colspan="2"><el-input v-model="form.idCard" :disabled="isReadonly" /></td>
+            <th>职位</th>
+            <td colspan="2"><el-input v-model="form.positionName" :disabled="isReadonly" /></td>
+          </tr>
+          <tr>
+            <th>毕业院校</th>
+            <td colspan="3"><el-input v-model="form.graduationSchool" :disabled="isReadonly" /></td>
+            <th>地址</th>
+            <td colspan="3"><el-input v-model="form.address" :disabled="isReadonly" /></td>
+          </tr>
+
+          <tr>
+            <th rowspan="2">学历学位</th>
+            <th>全日制教育</th>
+            <td colspan="2"><el-input v-model="form.fullTimeEducation" :disabled="isReadonly" /></td>
+            <th>毕业院校系及专业</th>
+            <td colspan="3"><el-input v-model="form.fullTimeSchoolMajor" :disabled="isReadonly" /></td>
+          </tr>
+          <tr>
+            <th>在职教育</th>
+            <td colspan="2"><el-input v-model="form.inServiceEducation" :disabled="isReadonly" /></td>
+            <th>毕业院校系及专业</th>
+            <td colspan="3"><el-input v-model="form.inServiceSchoolMajor" :disabled="isReadonly" /></td>
+          </tr>
+
+          <tr>
+            <th>现任职务</th>
+            <td colspan="7"><el-input v-model="form.currentPosition" :disabled="isReadonly" /></td>
+          </tr>
+          <tr>
+            <th>拟任职务</th>
+            <td colspan="7"><el-input v-model="form.proposedPosition" :disabled="isReadonly" /></td>
+          </tr>
+          <tr>
+            <th>拟免职务</th>
+            <td colspan="7"><el-input v-model="form.proposedRemovalPosition" :disabled="isReadonly" /></td>
+          </tr>
+
+          <tr>
+            <th>简历</th>
+            <td colspan="7">
+              <el-input v-model="form.resumeText" :disabled="isReadonly" :rows="5" type="textarea" />
+            </td>
+          </tr>
+          <tr>
+            <th>奖惩情况</th>
+            <td colspan="7">
+              <el-input v-model="form.rewardPunishment" :disabled="isReadonly" :rows="3" type="textarea" />
+            </td>
+          </tr>
+          <tr>
+            <th>年度考核结果</th>
+            <td colspan="7">
+              <el-input v-model="form.annualAssessmentResult" :disabled="isReadonly" :rows="3" type="textarea" />
+            </td>
+          </tr>
+          <tr>
+            <th>任免理由</th>
+            <td colspan="7">
+              <el-input v-model="form.appointmentReason" :disabled="isReadonly" :rows="4" type="textarea" />
+            </td>
+          </tr>
+
+          <tr>
+            <th>家庭主要成员及重要社会关系</th>
+            <td colspan="7">
+              <div class="family-editor">
+                <el-table :data="form.familyMembers" border class="family-table" size="small">
+                  <el-table-column label="称谓" min-width="110">
+                    <template #default="{ row }">
+                      <el-input v-model="row.relationship" :disabled="isReadonly" />
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="姓名" min-width="110">
+                    <template #default="{ row }">
+                      <el-input v-model="row.name" :disabled="isReadonly" />
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="年龄" width="96">
+                    <template #default="{ row }">
+                      <el-input-number
+                        v-model="row.age"
+                        :controls="false"
+                        :disabled="isReadonly"
+                        :max="150"
+                        :min="0"
+                      />
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="政治面貌" min-width="120">
+                    <template #default="{ row }">
+                      <el-input v-model="row.politicalStatus" :disabled="isReadonly" />
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="工作单位及职务" min-width="220">
+                    <template #default="{ row }">
+                      <el-input v-model="row.workUnitAndPosition" :disabled="isReadonly" />
+                    </template>
+                  </el-table-column>
+                  <el-table-column v-if="!isReadonly" label="操作" width="76">
+                    <template #default="{ $index }">
+                      <el-button :icon="Delete" link type="danger" @click="removeFamilyMember($index)">删除</el-button>
+                    </template>
+                  </el-table-column>
+                </el-table>
+
+                <el-button v-if="!isReadonly" :icon="CirclePlus" plain size="small" @click="addFamilyMember">
+                  添加成员
+                </el-button>
+              </div>
+            </td>
+          </tr>
+
+          <tr>
+            <th>呈报单位</th>
+            <td colspan="7">
+              <div class="opinion-cell">
+                <el-input v-model="form.reportingUnit" :disabled="isReadonly" :rows="4" type="textarea" />
+                <el-date-picker
+                  v-model="form.reportingUnitDate"
+                  :disabled="isReadonly"
+                  class="cell-date"
+                  format="YYYY-MM-DD"
+                  placeholder="选择日期"
+                  type="date"
+                  value-format="YYYY-MM-DD"
+                />
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <th>审批机关意见</th>
+            <td colspan="7">
+              <div class="opinion-cell">
+                <el-input
+                  v-model="form.approvalAuthorityOpinion"
+                  :disabled="isReadonly"
+                  :rows="4"
+                  type="textarea"
+                />
+                <el-date-picker
+                  v-model="form.approvalAuthorityDate"
+                  :disabled="isReadonly"
+                  class="cell-date"
+                  format="YYYY-MM-DD"
+                  placeholder="选择日期"
+                  type="date"
+                  value-format="YYYY-MM-DD"
+                />
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <th>行政机关任免意见</th>
+            <td colspan="7">
+              <div class="opinion-cell">
+                <el-input
+                  v-model="form.administrativeAppointmentOpinion"
+                  :disabled="isReadonly"
+                  :rows="4"
+                  type="textarea"
+                />
+                <el-date-picker
+                  v-model="form.administrativeAppointmentDate"
+                  :disabled="isReadonly"
+                  class="cell-date"
+                  format="YYYY-MM-DD"
+                  placeholder="选择日期"
+                  type="date"
+                  value-format="YYYY-MM-DD"
+                />
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <th>填表人</th>
+            <td colspan="7"><el-input v-model="form.formFiller" :disabled="isReadonly" /></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</template>
+
+<style scoped>
+.appointment-form-grid {
+  color: #111827;
+}
+
+.appointment-form-grid h2 {
+  margin: 0 0 16px;
+  color: #111827;
+  font-size: 26px;
+  line-height: 1.3;
+  text-align: center;
+  letter-spacing: 0;
+}
+
+.approval-table-shell {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid #1f2937;
+  background: #ffffff;
+}
+
+.approval-table {
+  width: 100%;
+  min-width: 980px;
+  border-collapse: collapse;
+  table-layout: fixed;
+  background: #ffffff;
+}
+
+.approval-table col.label-col {
+  width: 11%;
+}
+
+.approval-table col.value-col {
+  width: 14%;
+}
+
+.approval-table th,
+.approval-table td {
+  min-height: 48px;
+  padding: 8px;
+  border: 1px solid #1f2937;
+  vertical-align: middle;
+}
+
+.approval-table th {
+  background: #f8fafc;
+  color: #111827;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.45;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.approval-table td {
+  background: #ffffff;
+}
+
+.photo-cell {
+  height: 196px;
+}
+
+.family-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.family-editor > .el-button {
+  align-self: flex-start;
+}
+
+.family-table {
+  width: 100%;
+}
+
+.opinion-cell {
+  display: flex;
+  min-height: 142px;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cell-date {
+  align-self: flex-end;
+  width: 168px;
+}
+
+.appointment-form-grid :deep(.el-input),
+.appointment-form-grid :deep(.el-date-editor.el-input) {
+  width: 100%;
+}
+
+.appointment-form-grid :deep(.el-input__wrapper),
+.appointment-form-grid :deep(.el-textarea__inner) {
+  border-radius: 4px;
+  box-shadow: 0 0 0 1px #d1d5db inset;
+}
+
+.appointment-form-grid :deep(.el-textarea__inner) {
+  min-height: 88px;
+  resize: vertical;
+}
+
+.appointment-form-grid :deep(.el-input-number) {
+  width: 100%;
+}
+
+.appointment-form-grid :deep(.el-table .cell) {
+  padding-right: 6px;
+  padding-left: 6px;
+}
+
+.appointment-form-grid.is-readonly :deep(.el-input__wrapper),
+.appointment-form-grid.is-readonly :deep(.el-textarea__inner) {
+  background: #f9fafb;
+}
+
+@media (max-width: 720px) {
+  .appointment-form-grid h2 {
+    font-size: 22px;
+  }
+}
+</style>
