@@ -2,6 +2,7 @@ package com.company.admin;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
@@ -12,6 +13,7 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
@@ -25,6 +27,22 @@ class MigrationSmokeTest {
 
     @Test
     void contextLoadsWithMigrations() {
+    }
+
+    @Test
+    void productionJwtSecretRequiresEnvironmentVariableAndTestProfileHasLocalSecret() throws Exception {
+        String applicationYaml = new String(
+                new ClassPathResource("application.yml").getInputStream().readAllBytes(),
+                StandardCharsets.UTF_8);
+        String[] documents = applicationYaml.split("(?m)^---\\s*$");
+
+        assertThat(documents[0])
+                .containsPattern("(?m)^\\s*secret:\\s*\\$\\{JWT_SECRET}\\s*$")
+                .doesNotContain("${JWT_SECRET:");
+        assertThat(documents).hasSizeGreaterThanOrEqualTo(2);
+        assertThat(documents[1])
+                .contains("on-profile: test")
+                .contains("secret: group-admin-system-test-jwt-secret-2026-32-bytes");
     }
 
     @Test

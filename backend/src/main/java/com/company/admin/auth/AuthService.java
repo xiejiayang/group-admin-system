@@ -15,7 +15,9 @@ import com.company.admin.system.UserRepository;
 import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -24,8 +26,11 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class AuthService {
 
-    private static final Set<String> REGISTER_DEPARTMENT_CODES = Set.of("PARTY_HR", "GENERAL_ADMIN");
     private static final String DEFAULT_REGISTER_ROLE = "DEPARTMENT_USER";
+    private static final Map<String, String> DEPARTMENT_ROLE_CODES = Map.of(
+            "PARTY_HR", "PARTY_HR_USER",
+            "GENERAL_ADMIN", "GENERAL_ADMIN_USER");
+    private static final Set<String> REGISTER_DEPARTMENT_CODES = DEPARTMENT_ROLE_CODES.keySet();
 
     private final UserRepository userRepository;
     private final DepartmentRepository departmentRepository;
@@ -74,6 +79,8 @@ public class AuthService {
                 .orElseThrow(() -> new BusinessException("部门不存在或已停用"));
         Role defaultRole = roleRepository.findByCodeAndEnabledTrue(DEFAULT_REGISTER_ROLE)
                 .orElseThrow(() -> new BusinessException("默认角色不存在或已停用"));
+        Role departmentRole = roleRepository.findByCodeAndEnabledTrue(DEPARTMENT_ROLE_CODES.get(request.departmentCode()))
+                .orElseThrow(() -> new BusinessException("部门细分角色不存在或已停用"));
 
         User user = new User();
         user.setUsername(request.username());
@@ -83,11 +90,17 @@ public class AuthService {
         user.setDeleted(false);
         // 注册密码写入前必须 BCrypt 加密，数据库永远不保存明文密码。
         user.setPasswordHash(passwordEncoder.encode(request.password()));
-        // 第一版注册账号固定绑定 DEPARTMENT_USER，后续细分授权时再扩展角色选择流程。
+        // 注册账号同时绑定基础部门角色和部门细分角色，避免 DEPARTMENT_USER 聚合出跨部门菜单权限。
         user.getRoles().add(defaultRole);
+        user.getRoles().add(departmentRole);
 
-        User savedUser = userRepository.save(user);
-        return toAuthResponse(savedUser);
+        try {
+            // 并发注册同名账号时，数据库唯一约束是最后兜底；这里统一转换成业务错误，避免返回 500。
+            User savedUser = userRepository.saveAndFlush(user);
+            return toAuthResponse(savedUser);
+        } catch (DataIntegrityViolationException exception) {
+            throw new BusinessException("用户名已存在");
+        }
     }
 
     @Transactional(readOnly = true)

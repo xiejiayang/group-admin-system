@@ -23,7 +23,8 @@ server:
 
 app:
   jwt:
-    secret: ${JWT_SECRET:group-admin-system-default-jwt-secret-2026-change-in-production-64-bytes}
+    # 生产环境必须显式配置 JWT_SECRET，禁止在主配置中保留可部署生效的默认密钥。
+    secret: ${JWT_SECRET}
     expiration-minutes: ${JWT_EXPIRATION_MINUTES:120}
 
 ---
@@ -36,3 +37,7 @@ spring:
     username: sa
     password:
     driver-class-name: org.h2.Driver
+app:
+  jwt:
+    # 仅 test profile 使用固定测试密钥，避免生产环境误用默认 JWT 密钥。
+    secret: group-admin-system-test-jwt-secret-2026-32-bytes

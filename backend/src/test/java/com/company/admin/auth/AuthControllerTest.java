@@ -2,6 +2,7 @@ package com.company.admin.auth;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -71,6 +72,10 @@ class AuthControllerTest {
                 .andExpect(jsonPath("$.data.username").value(username))
                 .andExpect(jsonPath("$.data.departmentCode").value("PARTY_HR"))
                 .andExpect(jsonPath("$.data.roles", hasItem("DEPARTMENT_USER")))
+                .andExpect(jsonPath("$.data.roles", hasItem("PARTY_HR_USER")))
+                .andExpect(jsonPath("$.data.permissions", hasItem("menu:party-hr")))
+                .andExpect(jsonPath("$.data.permissions", hasItem("appointment:manage")))
+                .andExpect(jsonPath("$.data.permissions", not(hasItem("menu:general-admin"))))
                 .andExpect(jsonPath("$.data.token", notNullValue()))
                 .andReturn()
                 .getResponse()
@@ -86,6 +91,31 @@ class AuthControllerTest {
                 .andExpect(jsonPath("$.data.username").value(username))
                 .andExpect(jsonPath("$.data.departmentCode").value("PARTY_HR"))
                 .andExpect(jsonPath("$.data.roles", hasItem("DEPARTMENT_USER")))
+                .andExpect(jsonPath("$.data.roles", hasItem("PARTY_HR_USER")))
+                .andExpect(jsonPath("$.data.permissions", hasItem("menu:party-hr")))
+                .andExpect(jsonPath("$.data.permissions", hasItem("appointment:manage")))
+                .andExpect(jsonPath("$.data.permissions", not(hasItem("menu:general-admin"))))
+                .andExpect(jsonPath("$.data.token", notNullValue()));
+    }
+
+    @Test
+    void generalAdminUserOnlyReceivesGeneralAdminPermissions() throws Exception {
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "username", "general_admin_user",
+                                "password", "StrongPass123",
+                                "phone", "13700137000",
+                                "departmentCode", "GENERAL_ADMIN"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.username").value("general_admin_user"))
+                .andExpect(jsonPath("$.data.departmentCode").value("GENERAL_ADMIN"))
+                .andExpect(jsonPath("$.data.roles", hasItem("DEPARTMENT_USER")))
+                .andExpect(jsonPath("$.data.roles", hasItem("GENERAL_ADMIN_USER")))
+                .andExpect(jsonPath("$.data.permissions", hasItem("menu:general-admin")))
+                .andExpect(jsonPath("$.data.permissions", not(hasItem("menu:party-hr"))))
+                .andExpect(jsonPath("$.data.permissions", not(hasItem("appointment:manage"))))
                 .andExpect(jsonPath("$.data.token", notNullValue()));
     }
 

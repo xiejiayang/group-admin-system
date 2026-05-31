@@ -173,10 +173,12 @@ INSERT INTO sys_department(code, name, sort_order) VALUES
 ('PARTY_HR', '党群人力部', 1),
 ('GENERAL_ADMIN', '综合管理部', 2);
 
--- 角色初始化：超级管理员用于系统管理，部门用户用于普通部门账号的基础授权。
+-- 角色初始化：DEPARTMENT_USER 只作为部门账号基础角色，具体菜单权限由部门细分角色承载，避免跨部门泄露。
 INSERT INTO sys_role(code, name) VALUES
 ('SUPER_ADMIN', '超级管理员'),
-('DEPARTMENT_USER', '部门用户');
+('DEPARTMENT_USER', '部门用户'),
+('PARTY_HR_USER', '党群人力部用户'),
+('GENERAL_ADMIN_USER', '综合管理部用户');
 
 -- 默认超级管理员仅用于系统首版初始化，生产环境上线后应及时修改密码；密码为 xjyadmin 的 BCrypt 哈希，禁止写入明文密码。
 INSERT INTO sys_user(username, password_hash, phone, status) VALUES
@@ -202,7 +204,7 @@ INSERT INTO sys_menu(name, path, permission_code, sort_order) VALUES
 ('综合管理部', '/general-admin', 'menu:general-admin', 2),
 ('设置', '/settings/users', 'menu:settings', 3);
 
--- 角色权限初始化：超级管理员默认拥有全部权限，部门用户默认拥有部门菜单和任免管理基础权限。
+-- 角色权限初始化：超级管理员默认拥有全部权限；部门基础角色不绑定菜单，部门细分角色只绑定本部门权限。
 INSERT INTO sys_role_permission(role_id, permission_id)
 SELECT r.id, p.id
 FROM sys_role r
@@ -212,5 +214,11 @@ WHERE r.code = 'SUPER_ADMIN';
 INSERT INTO sys_role_permission(role_id, permission_id)
 SELECT r.id, p.id
 FROM sys_role r
-JOIN sys_permission p ON p.code IN ('menu:party-hr', 'menu:general-admin', 'appointment:manage')
-WHERE r.code = 'DEPARTMENT_USER';
+JOIN sys_permission p ON p.code IN ('menu:party-hr', 'appointment:manage')
+WHERE r.code = 'PARTY_HR_USER';
+
+INSERT INTO sys_role_permission(role_id, permission_id)
+SELECT r.id, p.id
+FROM sys_role r
+JOIN sys_permission p ON p.code IN ('menu:general-admin')
+WHERE r.code = 'GENERAL_ADMIN_USER';
