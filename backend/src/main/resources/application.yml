@@ -21,6 +21,11 @@ spring:
 server:
   port: ${BACKEND_PORT:8080}
 
+app:
+  jwt:
+    secret: ${JWT_SECRET:group-admin-system-default-jwt-secret-2026-change-in-production-64-bytes}
+    expiration-minutes: ${JWT_EXPIRATION_MINUTES:120}
+
 ---
 spring:
   config:
