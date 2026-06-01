@@ -34,14 +34,17 @@ describe('AppointmentFormGrid', () => {
     expect(textareaValues.length).toBeGreaterThan(0)
   })
 
-  it('disables form fields and hides photo upload controls in view mode', () => {
+  it.each([
+    ['view mode', { mode: 'view' as const }],
+    ['readonly prop', { mode: 'edit' as const, readonly: true }]
+  ])('disables form fields and hides photo upload controls in %s', (_label, readonlyProps) => {
     const wrapper = mount(AppointmentFormGrid, {
       props: {
         modelValue: {
           name: '张三',
           approvalAuthorityOpinion: '此表信息已认定'
         },
-        mode: 'view'
+        ...readonlyProps
       },
       global: {
         plugins: [ElementPlus]
