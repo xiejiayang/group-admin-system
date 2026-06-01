@@ -41,7 +41,6 @@ const requestDeleteFromRow = (row: unknown) => {
 
 <template>
   <el-table
-    v-if="appointments.length > 0 || loading"
     :data="appointments"
     :loading="loading"
     row-key="id"
@@ -63,7 +62,9 @@ const requestDeleteFromRow = (row: unknown) => {
         <el-button link type="danger" @click="requestDeleteFromRow(row)">删除</el-button>
       </template>
     </el-table-column>
-  </el-table>
 
-  <el-empty v-else description="待录入任免记录" />
+    <template #empty>
+      <el-empty description="待录入任免记录" />
+    </template>
+  </el-table>
 </template>
