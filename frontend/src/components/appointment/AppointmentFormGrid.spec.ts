@@ -33,4 +33,29 @@ describe('AppointmentFormGrid', () => {
     expect(textareaValues).toContain('此表信息已认定')
     expect(textareaValues.length).toBeGreaterThan(0)
   })
+
+  it('disables form fields and hides photo upload controls in view mode', () => {
+    const wrapper = mount(AppointmentFormGrid, {
+      props: {
+        modelValue: {
+          name: '张三',
+          approvalAuthorityOpinion: '此表信息已认定'
+        },
+        mode: 'view'
+      },
+      global: {
+        plugins: [ElementPlus]
+      }
+    })
+
+    const disabledInputs = wrapper.findAll('input').filter((input) => input.attributes('disabled') !== undefined)
+    const disabledTextareas = wrapper
+      .findAll('textarea')
+      .filter((textarea) => textarea.attributes('disabled') !== undefined)
+
+    expect(disabledInputs.length).toBeGreaterThan(0)
+    expect(disabledTextareas.length).toBeGreaterThan(0)
+    expect(wrapper.find('input[type="file"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('导入照片')
+  })
 })
