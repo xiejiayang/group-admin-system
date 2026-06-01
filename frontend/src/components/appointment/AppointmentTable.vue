@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { Delete, Edit } from '@element-plus/icons-vue'
 import { ElButton, ElEmpty, ElTable, ElTableColumn } from 'element-plus'
 
 import type { AppointmentSummary } from '@/types/appointment'
@@ -60,8 +59,8 @@ const requestDeleteFromRow = (row: unknown) => {
     <el-table-column label="地址" min-width="220" prop="address" show-overflow-tooltip />
     <el-table-column fixed="right" label="操作" width="132">
       <template #default="{ row }">
-        <el-button :icon="Edit" link type="primary" @click="openEditFromRow(row)">编辑</el-button>
-        <el-button :icon="Delete" link type="danger" @click="requestDeleteFromRow(row)">删除</el-button>
+        <el-button link type="primary" @click="openEditFromRow(row)">编辑</el-button>
+        <el-button link type="danger" @click="requestDeleteFromRow(row)">删除</el-button>
       </template>
     </el-table-column>
   </el-table>

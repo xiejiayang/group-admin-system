@@ -85,6 +85,29 @@ const removeFamilyMember = (index: number) => {
   <section class="appointment-form-grid" :class="{ 'is-readonly': isReadonly }">
     <h2>任免审批表</h2>
 
+    <div class="board-field-grid">
+      <label>
+        <span>电话</span>
+        <el-input v-model="form.phone" :disabled="isReadonly" />
+      </label>
+      <label>
+        <span>身份证号</span>
+        <el-input v-model="form.idCard" :disabled="isReadonly" />
+      </label>
+      <label>
+        <span>职位</span>
+        <el-input v-model="form.positionName" :disabled="isReadonly" />
+      </label>
+      <label>
+        <span>毕业院校</span>
+        <el-input v-model="form.graduationSchool" :disabled="isReadonly" />
+      </label>
+      <label class="wide">
+        <span>地址</span>
+        <el-input v-model="form.address" :disabled="isReadonly" />
+      </label>
+    </div>
+
     <div class="approval-table-shell">
       <table class="approval-table">
         <colgroup>
@@ -160,21 +183,6 @@ const removeFamilyMember = (index: number) => {
             <td><el-input v-model="form.technicalPosition" :disabled="isReadonly" /></td>
             <th>熟悉专业有何专长</th>
             <td colspan="3"><el-input v-model="form.specialty" :disabled="isReadonly" /></td>
-          </tr>
-
-          <tr>
-            <th>电话</th>
-            <td><el-input v-model="form.phone" :disabled="isReadonly" /></td>
-            <th>身份证号</th>
-            <td colspan="2"><el-input v-model="form.idCard" :disabled="isReadonly" /></td>
-            <th>职位</th>
-            <td colspan="2"><el-input v-model="form.positionName" :disabled="isReadonly" /></td>
-          </tr>
-          <tr>
-            <th>毕业院校</th>
-            <td colspan="3"><el-input v-model="form.graduationSchool" :disabled="isReadonly" /></td>
-            <th>地址</th>
-            <td colspan="3"><el-input v-model="form.address" :disabled="isReadonly" /></td>
           </tr>
 
           <tr>
@@ -298,7 +306,7 @@ const removeFamilyMember = (index: number) => {
           </tr>
           <tr>
             <th>审批机关意见</th>
-            <td colspan="7">
+            <td colspan="3">
               <div class="opinion-cell">
                 <el-input
                   v-model="form.approvalAuthorityOpinion"
@@ -317,10 +325,8 @@ const removeFamilyMember = (index: number) => {
                 />
               </div>
             </td>
-          </tr>
-          <tr>
             <th>行政机关任免意见</th>
-            <td colspan="7">
+            <td colspan="3">
               <div class="opinion-cell">
                 <el-input
                   v-model="form.administrativeAppointmentOpinion"
@@ -362,6 +368,30 @@ const removeFamilyMember = (index: number) => {
   line-height: 1.3;
   text-align: center;
   letter-spacing: 0;
+}
+
+.board-field-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 12px;
+  border: 1px solid #d1d5db;
+  background: #ffffff;
+}
+
+.board-field-grid label {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.board-field-grid .wide {
+  grid-column: span 2;
 }
 
 .approval-table-shell {
@@ -472,6 +502,14 @@ const removeFamilyMember = (index: number) => {
 @media (max-width: 720px) {
   .appointment-form-grid h2 {
     font-size: 22px;
+  }
+
+  .board-field-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .board-field-grid .wide {
+    grid-column: auto;
   }
 }
 </style>

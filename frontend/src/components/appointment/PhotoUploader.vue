@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { UploadFilled } from '@element-plus/icons-vue'
 import { ElButton, ElMessage } from 'element-plus'
-import { computed, ref } from 'vue'
+import { onBeforeUnmount, ref, watch } from 'vue'
 
-import { fileReadUrl, uploadIdPhoto, type FileUploadResponse } from '@/api/file'
+import { fetchFileBlob, uploadIdPhoto, type FileUploadResponse } from '@/api/file'
 
 const props = defineProps<{
   modelValue?: number | null
@@ -17,9 +17,51 @@ const emit = defineEmits<{
 
 const fileInput = ref<HTMLInputElement | null>(null)
 const uploading = ref(false)
+const previewUrl = ref('')
+let objectUrl = ''
+let previewRequestId = 0
 
-const previewUrl = computed(() => {
-  return props.modelValue ? fileReadUrl(props.modelValue) : ''
+const revokePreviewUrl = () => {
+  if (objectUrl) {
+    URL.revokeObjectURL(objectUrl)
+    objectUrl = ''
+  }
+}
+
+const loadPreview = async (fileId: number | null | undefined) => {
+  const requestId = ++previewRequestId
+  revokePreviewUrl()
+  previewUrl.value = ''
+
+  if (!fileId) {
+    return
+  }
+
+  try {
+    // 文件读取接口需要 Bearer token，不能直接把 /api/files/{id} 放到 img src 中。
+    const blob = await fetchFileBlob(fileId)
+    if (requestId !== previewRequestId) {
+      return
+    }
+    objectUrl = URL.createObjectURL(blob)
+    previewUrl.value = objectUrl
+  } catch {
+    if (requestId === previewRequestId) {
+      ElMessage.warning('证件照预览加载失败')
+    }
+  }
+}
+
+watch(
+  () => props.modelValue,
+  (fileId) => {
+    void loadPreview(fileId)
+  },
+  { immediate: true }
+)
+
+onBeforeUnmount(() => {
+  revokePreviewUrl()
 })
 
 const openFilePicker = () => {
@@ -67,6 +109,7 @@ const handleFileChange = async (event: Event) => {
     const uploadedFile = await uploadIdPhoto(file)
     emit('update:modelValue', uploadedFile.id)
     emit('uploaded', uploadedFile)
+    await loadPreview(uploadedFile.id)
     ElMessage.success('证件照已上传')
   } catch (error) {
     ElMessage.error(toMessage(error, '证件照上传失败'))
