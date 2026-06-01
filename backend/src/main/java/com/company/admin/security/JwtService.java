@@ -9,6 +9,7 @@ import java.time.Instant;
 import java.util.Base64;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import org.springframework.beans.factory.annotation.Value;
@@ -20,6 +21,9 @@ public class JwtService {
     private static final String HMAC_ALGORITHM = "HmacSHA256";
     private static final Base64.Encoder BASE64_URL_ENCODER = Base64.getUrlEncoder().withoutPadding();
     private static final Base64.Decoder BASE64_URL_DECODER = Base64.getUrlDecoder();
+    private static final Set<String> DISALLOWED_SECRETS = Set.of(
+            "change_this_jwt_secret_before_deploy",
+            "R8vY6tM4pQ2nB9xL7sD5fH3jK1cZ0aW6uE4rT2yI8oP0mN9bV5cX3zA1qS7dF6gH");
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final byte[] secret;
@@ -28,7 +32,13 @@ public class JwtService {
     public JwtService(
             @Value("${app.jwt.secret}") String secret,
             @Value("${app.jwt.expiration-minutes:120}") long expirationMinutes) {
-        byte[] secretBytes = secret.getBytes(StandardCharsets.UTF_8);
+        String normalizedSecret = secret == null ? "" : secret.trim();
+        if (DISALLOWED_SECRETS.contains(normalizedSecret)) {
+            throw new IllegalStateException("JWT secret must be replaced before deployment");
+        }
+
+        // JWT 密钥直接决定 token 签名可信度，禁止使用空值、短值或模板占位值启动服务。
+        byte[] secretBytes = normalizedSecret.getBytes(StandardCharsets.UTF_8);
         if (secretBytes.length < 32) {
             throw new IllegalStateException("JWT secret must contain at least 32 bytes");
         }

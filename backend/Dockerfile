@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM eclipse-temurin:17-jdk-jammy AS build
+FROM eclipse-temurin:17.0.19_10-jdk-jammy AS build
 
 WORKDIR /workspace/app
 
@@ -18,7 +18,7 @@ COPY src src
 
 RUN ./mvnw -DskipTests package
 
-FROM eclipse-temurin:17-jre-jammy AS runtime
+FROM eclipse-temurin:17.0.19_10-jre-jammy AS runtime
 
 WORKDIR /app
 
