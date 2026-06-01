@@ -11,6 +11,12 @@
 - 账号：`superadmin`
 - 初始密码：`xjyadmin`
 
+生产上线前必须替换默认超级管理员密码。首版暂未提供前端改密功能，请先生成新的 BCrypt 密码哈希，再在部署后的数据库中执行更新：
+
+```bash
+docker compose exec mysql sh -lc 'mysql -u root -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE" -e "UPDATE sys_user SET password_hash = '\''<新BCrypt哈希>'\'' WHERE username = '\''superadmin'\'';"'
+```
+
 ## 本地开发入口
 
 - 后端：`backend/`
@@ -44,4 +50,4 @@
    http://localhost:${FRONTEND_PORT}
    ```
 
-Compose 会启动 MySQL 8.4、Spring Boot 后端和 Nginx 前端。后端会连接 `mysql:3306` 并执行 Flyway 迁移；上传文件目录通过 `uploads` volume 挂载到 `${UPLOAD_DIR}`，默认 `/app/uploads`。Nginx 将 `/api/` 代理到容器内 `http://backend:8080/api/`，默认保持 `BACKEND_PORT=8080`。
+Compose 会启动 MySQL 8.4、Spring Boot 后端和 Nginx 前端。后端会连接 `mysql:3306` 并执行 Flyway 迁移；上传文件目录通过 `uploads` volume 固定挂载到容器内 `/app/uploads`。Nginx 将 `/api/` 代理到容器内 `http://backend:8080/api/`，因此后端容器内端口固定为 `8080`。对外访问端口通过 `FRONTEND_PORT` 调整。

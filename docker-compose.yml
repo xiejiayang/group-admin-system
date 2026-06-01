@@ -34,13 +34,13 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:?MYSQL_PASSWORD is required}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       JWT_EXPIRATION_MINUTES: ${JWT_EXPIRATION_MINUTES:-120}
-      UPLOAD_DIR: ${UPLOAD_DIR:-/app/uploads}
-      BACKEND_PORT: ${BACKEND_PORT:-8080}
+      UPLOAD_DIR: /app/uploads
+      BACKEND_PORT: 8080
       TZ: ${TZ:-Asia/Shanghai}
     expose:
-      - "${BACKEND_PORT:-8080}"
+      - "8080"
     volumes:
-      - uploads:${UPLOAD_DIR:-/app/uploads}
+      - uploads:/app/uploads
 
   frontend:
     build:
