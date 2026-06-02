@@ -80,8 +80,8 @@ Create `backend/src/main/resources/db/migration/V2__appointment_board_fields.sql
 
 ```sql
 ALTER TABLE appointment_record
-  ADD COLUMN global_sequence INT NOT NULL DEFAULT 0,
-  ADD COLUMN display_sequence INT NOT NULL DEFAULT 0,
+  ADD COLUMN global_sequence BIGINT NOT NULL DEFAULT 0,
+  ADD COLUMN display_sequence BIGINT NOT NULL DEFAULT 0,
   ADD COLUMN company_name VARCHAR(120) NOT NULL DEFAULT '集团公司',
   ADD COLUMN department_name VARCHAR(120) NOT NULL DEFAULT '党群人力部',
   ADD COLUMN political_status VARCHAR(80) NULL,
@@ -253,8 +253,8 @@ String remark,
 Update `AppointmentDetailResponse` to include the same editable fields plus `globalSequence`, `displaySequence`, and `age` near the top:
 
 ```java
-Integer globalSequence,
-Integer displaySequence,
+Long globalSequence,
+Long displaySequence,
 String companyName,
 String departmentName,
 Integer age,
@@ -275,8 +275,8 @@ Replace `AppointmentSummaryResponse` with:
 ```java
 public record AppointmentSummaryResponse(
         Long id,
-        Integer globalSequence,
-        Integer displaySequence,
+        Long globalSequence,
+        Long displaySequence,
         String companyName,
         String departmentName,
         String name,
@@ -307,10 +307,10 @@ Add fields and accessors in `AppointmentRecord.java`:
 
 ```java
 @Column(name = "global_sequence", nullable = false)
-private Integer globalSequence;
+private Long globalSequence;
 
 @Column(name = "display_sequence", nullable = false)
-private Integer displaySequence;
+private Long displaySequence;
 
 @Column(name = "company_name", nullable = false, length = 120)
 private String companyName;
@@ -352,19 +352,19 @@ private String remark;
 Add these accessor methods:
 
 ```java
-public Integer getGlobalSequence() {
+public Long getGlobalSequence() {
     return globalSequence;
 }
 
-public void setGlobalSequence(Integer globalSequence) {
+public void setGlobalSequence(Long globalSequence) {
     this.globalSequence = globalSequence;
 }
 
-public Integer getDisplaySequence() {
+public Long getDisplaySequence() {
     return displaySequence;
 }
 
-public void setDisplaySequence(Integer displaySequence) {
+public void setDisplaySequence(Long displaySequence) {
     this.displaySequence = displaySequence;
 }
 
@@ -696,10 +696,10 @@ Update `AppointmentRecordRepository.java`:
 
 ```java
 @Query("select coalesce(max(a.globalSequence), 0) from AppointmentRecord a where a.deleted = false and a.companyName = :companyName")
-int maxGlobalSequenceByCompanyName(String companyName);
+long maxGlobalSequenceByCompanyName(String companyName);
 
 @Query("select coalesce(max(a.displaySequence), 0) from AppointmentRecord a where a.deleted = false")
-int maxDisplaySequence();
+long maxDisplaySequence();
 
 List<AppointmentRecord> findByDeletedFalseOrderByDisplaySequenceAscIdAsc();
 ```
