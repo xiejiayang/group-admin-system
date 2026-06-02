@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.nullValue;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -15,6 +16,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -22,6 +26,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Primary;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
@@ -33,6 +40,8 @@ import org.springframework.web.context.WebApplicationContext;
 @SpringBootTest
 @ActiveProfiles("test")
 class AppointmentControllerTest {
+
+    private static final int EXPECTED_AGE_ON_FIXED_CLOCK = 36;
 
     private MockMvc mockMvc;
 
@@ -83,21 +92,47 @@ class AppointmentControllerTest {
                 .andExpect(jsonPath("$.data.page").value(0))
                 .andExpect(jsonPath("$.data.size").value(10))
                 .andExpect(jsonPath("$.data.items[*].id", hasItem(appointmentId.intValue())))
+                .andExpect(jsonPath("$.data.items[*].globalSequence", hasItem(0)))
+                .andExpect(jsonPath("$.data.items[*].displaySequence", hasItem(0)))
+                .andExpect(jsonPath("$.data.items[*].companyName", hasItem("集团公司")))
+                .andExpect(jsonPath("$.data.items[*].departmentName", hasItem("党群人力部")))
                 .andExpect(jsonPath("$.data.items[*].name", hasItem("张三")))
-                .andExpect(jsonPath("$.data.items[*].phone", hasItem("13900001111")))
+                .andExpect(jsonPath("$.data.items[*].currentPosition", hasItem("党群主管")))
+                .andExpect(jsonPath("$.data.items[*].gender", hasItem("男")))
+                .andExpect(jsonPath("$.data.items[*].ethnicity", hasItem("汉族")))
                 .andExpect(jsonPath("$.data.items[*].idCard", hasItem("110101199001011234")))
-                .andExpect(jsonPath("$.data.items[*].positionName", hasItem("党群主管")))
-                .andExpect(jsonPath("$.data.items[*].graduationSchool", hasItem("中国人民大学")))
-                .andExpect(jsonPath("$.data.items[*].address", hasItem("北京市朝阳区")));
+                .andExpect(jsonPath("$.data.items[*].age", hasItem(EXPECTED_AGE_ON_FIXED_CLOCK)))
+                .andExpect(jsonPath("$.data.items[*].politicalStatus", hasItem("中共党员")))
+                .andExpect(jsonPath("$.data.items[*].fullTimeEducation", hasItem("本科")))
+                .andExpect(jsonPath("$.data.items[*].fullTimeEducationDegree", hasItem("学士")))
+                .andExpect(jsonPath("$.data.items[*].fullTimeSchool", hasItem("中国人民大学")))
+                .andExpect(jsonPath("$.data.items[*].fullTimeMajor", hasItem("行政管理")))
+                .andExpect(jsonPath("$.data.items[*].partTimeEducation", hasItem("硕士研究生")))
+                .andExpect(jsonPath("$.data.items[*].partTimeDegree", hasItem("硕士")))
+                .andExpect(jsonPath("$.data.items[*].partTimeSchool", hasItem("中央党校")))
+                .andExpect(jsonPath("$.data.items[*].partTimeMajor", hasItem("经济管理")))
+                .andExpect(jsonPath("$.data.items[*].technicalPosition", hasItem("高级政工师")))
+                .andExpect(jsonPath("$.data.items[*].phone", hasItem("13900001111")))
+                .andExpect(jsonPath("$.data.items[*].maritalStatus", hasItem("已婚")))
+                .andExpect(jsonPath("$.data.items[*].remark", hasItem("看板备注")))
+                .andExpect(jsonPath("$.data.items[0].positionName").doesNotExist())
+                .andExpect(jsonPath("$.data.items[0].graduationSchool").doesNotExist())
+                .andExpect(jsonPath("$.data.items[0].address").doesNotExist());
 
         mockMvc.perform(get("/api/party-hr/appointments/{id}", appointmentId)
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.id").value(appointmentId))
+                .andExpect(jsonPath("$.data.globalSequence").value(0))
+                .andExpect(jsonPath("$.data.displaySequence").value(0))
+                .andExpect(jsonPath("$.data.companyName").value("集团公司"))
+                .andExpect(jsonPath("$.data.departmentName").value("党群人力部"))
                 .andExpect(jsonPath("$.data.gender").value("男"))
                 .andExpect(jsonPath("$.data.birthDate").value("1990-01-01"))
+                .andExpect(jsonPath("$.data.age").value(EXPECTED_AGE_ON_FIXED_CLOCK))
                 .andExpect(jsonPath("$.data.ethnicity").value("汉族"))
+                .andExpect(jsonPath("$.data.politicalStatus").value("中共党员"))
                 .andExpect(jsonPath("$.data.nativePlace").value("山东济南"))
                 .andExpect(jsonPath("$.data.birthPlace").value("北京"))
                 .andExpect(jsonPath("$.data.partyJoinDate").value("2012-07-01"))
@@ -106,9 +141,16 @@ class AppointmentControllerTest {
                 .andExpect(jsonPath("$.data.technicalPosition").value("高级政工师"))
                 .andExpect(jsonPath("$.data.specialty").value("公共管理"))
                 .andExpect(jsonPath("$.data.fullTimeEducation").value("本科"))
+                .andExpect(jsonPath("$.data.fullTimeEducationDegree").value("学士"))
+                .andExpect(jsonPath("$.data.fullTimeSchool").value("中国人民大学"))
+                .andExpect(jsonPath("$.data.fullTimeMajor").value("行政管理"))
                 .andExpect(jsonPath("$.data.fullTimeSchoolMajor").value("中国人民大学 行政管理"))
                 .andExpect(jsonPath("$.data.inServiceEducation").value("硕士"))
                 .andExpect(jsonPath("$.data.inServiceSchoolMajor").value("中央党校 经济管理"))
+                .andExpect(jsonPath("$.data.partTimeEducation").value("硕士研究生"))
+                .andExpect(jsonPath("$.data.partTimeDegree").value("硕士"))
+                .andExpect(jsonPath("$.data.partTimeSchool").value("中央党校"))
+                .andExpect(jsonPath("$.data.partTimeMajor").value("经济管理"))
                 .andExpect(jsonPath("$.data.currentPosition").value("党群主管"))
                 .andExpect(jsonPath("$.data.proposedPosition").value("党群人力部副部长"))
                 .andExpect(jsonPath("$.data.proposedRemovalPosition").value("党群主管"))
@@ -124,6 +166,8 @@ class AppointmentControllerTest {
                 .andExpect(jsonPath("$.data.administrativeAppointmentDate").value("2026-05-22"))
                 .andExpect(jsonPath("$.data.formFiller").value("王五"))
                 .andExpect(jsonPath("$.data.photoFileId").value(1))
+                .andExpect(jsonPath("$.data.maritalStatus").value("已婚"))
+                .andExpect(jsonPath("$.data.remark").value("看板备注"))
                 .andExpect(jsonPath("$.data.familyMembers[0].relationship").value("配偶"))
                 .andExpect(jsonPath("$.data.familyMembers[0].name").value("李四"))
                 .andExpect(jsonPath("$.data.familyMembers[0].age").value(35))
@@ -238,6 +282,60 @@ class AppointmentControllerTest {
     }
 
     @Test
+    void rejectsInvalidAppointmentBoardDepartment() throws Exception {
+        String token = loginSuperadmin().token();
+        Map<String, Object> request = mutableCreateRequest();
+        request.put("departmentName", "不存在的部门");
+
+        mockMvc.perform(post("/api/party-hr/appointments")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message", containsString("所属部门")))
+                .andExpect(jsonPath("$.message", not(containsString("DataIntegrity"))))
+                .andExpect(jsonPath("$.message", not(containsString("constraint"))));
+    }
+
+    @Test
+    void rejectsMissingAppointmentBoardDepartment() throws Exception {
+        String token = loginSuperadmin().token();
+        Map<String, Object> request = mutableCreateRequest();
+        request.remove("departmentName");
+
+        mockMvc.perform(post("/api/party-hr/appointments")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message", containsString("所属部门")))
+                .andExpect(jsonPath("$.message", not(containsString("DataIntegrity"))))
+                .andExpect(jsonPath("$.message", not(containsString("constraint"))));
+    }
+
+    @Test
+    void ageIsNullWhenBirthDateIsMissing() throws Exception {
+        String token = loginSuperadmin().token();
+        Map<String, Object> request = mutableCreateRequest();
+        request.remove("birthDate");
+        Long appointmentId = createAppointment(token, request);
+
+        assertAppointmentAgeIsNull(token, appointmentId);
+    }
+
+    @Test
+    void ageIsNullWhenBirthDateIsInFuture() throws Exception {
+        String token = loginSuperadmin().token();
+        Map<String, Object> request = mutableCreateRequest();
+        request.put("birthDate", "2026-06-03");
+        Long appointmentId = createAppointment(token, request);
+
+        assertAppointmentAgeIsNull(token, appointmentId);
+    }
+
+    @Test
     void generalAdminCannotCreateUpdateOrDeleteAppointmentRecord() throws Exception {
         String superadminToken = loginSuperadmin().token();
         Long appointmentId = createAppointment(superadminToken, createRequest("audited-user", "reason", List.of()));
@@ -314,6 +412,22 @@ class AppointmentControllerTest {
         return objectMapper.readTree(result.getResponse().getContentAsString()).path("data").path("id").asLong();
     }
 
+    private void assertAppointmentAgeIsNull(String token, Long appointmentId) throws Exception {
+        mockMvc.perform(get("/api/party-hr/appointments")
+                        .param("page", "0")
+                .param("size", "10")
+                .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].id").value(appointmentId.intValue()))
+                .andExpect(jsonPath("$.data.items[0].age").value(nullValue()));
+
+        mockMvc.perform(get("/api/party-hr/appointments/{id}", appointmentId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(appointmentId))
+                .andExpect(jsonPath("$.data.age").value(nullValue()));
+    }
+
     private void assertInvalidPhotoFileIdRejected(String token, Long photoFileId) throws Exception {
         Map<String, Object> request = mutableCreateRequest();
         request.put("photoFileId", photoFileId);
@@ -365,11 +479,14 @@ class AppointmentControllerTest {
                 Map.entry("phone", "13900001111"),
                 Map.entry("idCard", "110101199001011234"),
                 Map.entry("positionName", "党群主管"),
+                Map.entry("companyName", ""),
+                Map.entry("departmentName", "党群人力部"),
                 Map.entry("graduationSchool", "中国人民大学"),
                 Map.entry("address", "北京市朝阳区"),
                 Map.entry("gender", "男"),
                 Map.entry("birthDate", "1990-01-01"),
                 Map.entry("ethnicity", "汉族"),
+                Map.entry("politicalStatus", "中共党员"),
                 Map.entry("nativePlace", "山东济南"),
                 Map.entry("birthPlace", "北京"),
                 Map.entry("partyJoinDate", "2012-07-01"),
@@ -378,9 +495,16 @@ class AppointmentControllerTest {
                 Map.entry("technicalPosition", "高级政工师"),
                 Map.entry("specialty", "公共管理"),
                 Map.entry("fullTimeEducation", "本科"),
+                Map.entry("fullTimeEducationDegree", "学士"),
+                Map.entry("fullTimeSchool", "中国人民大学"),
+                Map.entry("fullTimeMajor", "行政管理"),
                 Map.entry("fullTimeSchoolMajor", "中国人民大学 行政管理"),
                 Map.entry("inServiceEducation", "硕士"),
                 Map.entry("inServiceSchoolMajor", "中央党校 经济管理"),
+                Map.entry("partTimeEducation", "硕士研究生"),
+                Map.entry("partTimeDegree", "硕士"),
+                Map.entry("partTimeSchool", "中央党校"),
+                Map.entry("partTimeMajor", "经济管理"),
                 Map.entry("currentPosition", "党群主管"),
                 Map.entry("proposedPosition", "党群人力部副部长"),
                 Map.entry("proposedRemovalPosition", "党群主管"),
@@ -395,6 +519,8 @@ class AppointmentControllerTest {
                 Map.entry("administrativeAppointmentDate", "2026-05-22"),
                 Map.entry("formFiller", "王五"),
                 Map.entry("photoFileId", 1),
+                Map.entry("maritalStatus", "已婚"),
+                Map.entry("remark", "看板备注"),
                 Map.entry("familyMembers", familyMembers));
     }
 
@@ -456,5 +582,15 @@ class AppointmentControllerTest {
     }
 
     private record AuthPayload(Long id, String username, String token) {
+    }
+
+    @TestConfiguration
+    static class FixedClockConfiguration {
+
+        @Bean
+        @Primary
+        Clock fixedClock() {
+            return Clock.fixed(Instant.parse("2026-06-02T00:00:00Z"), ZoneId.of("Asia/Shanghai"));
+        }
     }
 }

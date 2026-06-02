@@ -23,6 +23,12 @@ public record AppointmentRecordRequest(
         @Size(max = 100)
         String positionName,
 
+        @Size(max = 120)
+        String companyName,
+
+        @Size(max = 120)
+        String departmentName,
+
         @NotBlank(message = "不能为空")
         @Size(max = 160)
         String graduationSchool,
@@ -36,6 +42,8 @@ public record AppointmentRecordRequest(
         LocalDate birthDate,
         @Size(max = 60)
         String ethnicity,
+        @Size(max = 80)
+        String politicalStatus,
         @Size(max = 120)
         String nativePlace,
         @Size(max = 120)
@@ -50,12 +58,26 @@ public record AppointmentRecordRequest(
         String specialty,
         @Size(max = 160)
         String fullTimeEducation,
+        @Size(max = 120)
+        String fullTimeEducationDegree,
+        @Size(max = 160)
+        String fullTimeSchool,
+        @Size(max = 160)
+        String fullTimeMajor,
         @Size(max = 255)
         String fullTimeSchoolMajor,
         @Size(max = 160)
         String inServiceEducation,
         @Size(max = 255)
         String inServiceSchoolMajor,
+        @Size(max = 160)
+        String partTimeEducation,
+        @Size(max = 120)
+        String partTimeDegree,
+        @Size(max = 160)
+        String partTimeSchool,
+        @Size(max = 160)
+        String partTimeMajor,
         @Size(max = 255)
         String currentPosition,
         @Size(max = 255)
@@ -74,6 +96,9 @@ public record AppointmentRecordRequest(
         LocalDate administrativeAppointmentDate,
         @Size(max = 100)
         String formFiller,
+        @Size(max = 40)
+        String maritalStatus,
+        String remark,
         Long photoFileId,
         @Valid
         List<@Valid AppointmentFamilyMemberRequest> familyMembers) {

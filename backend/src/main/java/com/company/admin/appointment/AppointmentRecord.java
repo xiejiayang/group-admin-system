@@ -22,6 +22,18 @@ public class AppointmentRecord {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name = "global_sequence", nullable = false)
+    private Long globalSequence = 0L;
+
+    @Column(name = "display_sequence", nullable = false)
+    private Long displaySequence = 0L;
+
+    @Column(name = "company_name", nullable = false, length = 120)
+    private String companyName;
+
+    @Column(name = "department_name", nullable = false, length = 120)
+    private String departmentName;
+
     @Column(nullable = false, length = 64)
     private String name;
 
@@ -49,6 +61,9 @@ public class AppointmentRecord {
     @Column(length = 60)
     private String ethnicity;
 
+    @Column(name = "political_status", length = 80)
+    private String politicalStatus;
+
     @Column(name = "native_place", length = 120)
     private String nativePlace;
 
@@ -73,6 +88,15 @@ public class AppointmentRecord {
     @Column(name = "full_time_education", length = 160)
     private String fullTimeEducation;
 
+    @Column(name = "full_time_education_degree", length = 120)
+    private String fullTimeEducationDegree;
+
+    @Column(name = "full_time_school", length = 160)
+    private String fullTimeSchool;
+
+    @Column(name = "full_time_major", length = 160)
+    private String fullTimeMajor;
+
     @Column(name = "full_time_school_major", length = 255)
     private String fullTimeSchoolMajor;
 
@@ -81,6 +105,18 @@ public class AppointmentRecord {
 
     @Column(name = "in_service_school_major", length = 255)
     private String inServiceSchoolMajor;
+
+    @Column(name = "part_time_education", length = 160)
+    private String partTimeEducation;
+
+    @Column(name = "part_time_degree", length = 120)
+    private String partTimeDegree;
+
+    @Column(name = "part_time_school", length = 160)
+    private String partTimeSchool;
+
+    @Column(name = "part_time_major", length = 160)
+    private String partTimeMajor;
 
     @Column(name = "current_position", length = 255)
     private String currentPosition;
@@ -124,6 +160,12 @@ public class AppointmentRecord {
     @Column(name = "form_filler", length = 100)
     private String formFiller;
 
+    @Column(name = "marital_status", length = 40)
+    private String maritalStatus;
+
+    @Column(columnDefinition = "TEXT")
+    private String remark;
+
     @Column(name = "photo_file_id")
     private Long photoFileId;
 
@@ -142,6 +184,38 @@ public class AppointmentRecord {
 
     public Long getId() {
         return id;
+    }
+
+    public Long getGlobalSequence() {
+        return globalSequence;
+    }
+
+    public void setGlobalSequence(Long globalSequence) {
+        this.globalSequence = globalSequence;
+    }
+
+    public Long getDisplaySequence() {
+        return displaySequence;
+    }
+
+    public void setDisplaySequence(Long displaySequence) {
+        this.displaySequence = displaySequence;
+    }
+
+    public String getCompanyName() {
+        return companyName;
+    }
+
+    public void setCompanyName(String companyName) {
+        this.companyName = companyName;
+    }
+
+    public String getDepartmentName() {
+        return departmentName;
+    }
+
+    public void setDepartmentName(String departmentName) {
+        this.departmentName = departmentName;
     }
 
     public String getName() {
@@ -216,6 +290,14 @@ public class AppointmentRecord {
         this.ethnicity = ethnicity;
     }
 
+    public String getPoliticalStatus() {
+        return politicalStatus;
+    }
+
+    public void setPoliticalStatus(String politicalStatus) {
+        this.politicalStatus = politicalStatus;
+    }
+
     public String getNativePlace() {
         return nativePlace;
     }
@@ -280,6 +362,30 @@ public class AppointmentRecord {
         this.fullTimeEducation = fullTimeEducation;
     }
 
+    public String getFullTimeEducationDegree() {
+        return fullTimeEducationDegree;
+    }
+
+    public void setFullTimeEducationDegree(String fullTimeEducationDegree) {
+        this.fullTimeEducationDegree = fullTimeEducationDegree;
+    }
+
+    public String getFullTimeSchool() {
+        return fullTimeSchool;
+    }
+
+    public void setFullTimeSchool(String fullTimeSchool) {
+        this.fullTimeSchool = fullTimeSchool;
+    }
+
+    public String getFullTimeMajor() {
+        return fullTimeMajor;
+    }
+
+    public void setFullTimeMajor(String fullTimeMajor) {
+        this.fullTimeMajor = fullTimeMajor;
+    }
+
     public String getFullTimeSchoolMajor() {
         return fullTimeSchoolMajor;
     }
@@ -302,6 +408,38 @@ public class AppointmentRecord {
 
     public void setInServiceSchoolMajor(String inServiceSchoolMajor) {
         this.inServiceSchoolMajor = inServiceSchoolMajor;
+    }
+
+    public String getPartTimeEducation() {
+        return partTimeEducation;
+    }
+
+    public void setPartTimeEducation(String partTimeEducation) {
+        this.partTimeEducation = partTimeEducation;
+    }
+
+    public String getPartTimeDegree() {
+        return partTimeDegree;
+    }
+
+    public void setPartTimeDegree(String partTimeDegree) {
+        this.partTimeDegree = partTimeDegree;
+    }
+
+    public String getPartTimeSchool() {
+        return partTimeSchool;
+    }
+
+    public void setPartTimeSchool(String partTimeSchool) {
+        this.partTimeSchool = partTimeSchool;
+    }
+
+    public String getPartTimeMajor() {
+        return partTimeMajor;
+    }
+
+    public void setPartTimeMajor(String partTimeMajor) {
+        this.partTimeMajor = partTimeMajor;
     }
 
     public String getCurrentPosition() {
@@ -414,6 +552,22 @@ public class AppointmentRecord {
 
     public void setFormFiller(String formFiller) {
         this.formFiller = formFiller;
+    }
+
+    public String getMaritalStatus() {
+        return maritalStatus;
+    }
+
+    public void setMaritalStatus(String maritalStatus) {
+        this.maritalStatus = maritalStatus;
+    }
+
+    public String getRemark() {
+        return remark;
+    }
+
+    public void setRemark(String remark) {
+        this.remark = remark;
     }
 
     public Long getPhotoFileId() {

@@ -15,6 +15,9 @@ import com.company.admin.system.Permission;
 import com.company.admin.system.Role;
 import com.company.admin.system.User;
 import com.company.admin.system.UserRepository;
+import java.time.Clock;
+import java.time.LocalDate;
+import java.time.Period;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -33,18 +36,34 @@ public class AppointmentService {
     private static final String PARTY_HR_DEPARTMENT = "PARTY_HR";
     private static final String APPOINTMENT_MANAGE_PERMISSION = "appointment:manage";
     private static final String DEFAULT_APPROVAL_AUTHORITY_OPINION = "此表信息已认定";
+    private static final String DEFAULT_COMPANY_NAME = "集团公司";
+    private static final Set<String> APPOINTMENT_BOARD_DEPARTMENTS = Set.of(
+            "领导班子",
+            "专家顾问",
+            "董事会办公室",
+            "财务管理部",
+            "纪检监察部",
+            "党群人力部",
+            "综合管理部",
+            "融资管理部",
+            "产业发展部",
+            "法务风控部",
+            "建设管理部");
 
     private final AppointmentRecordRepository appointmentRecordRepository;
     private final UserRepository userRepository;
     private final SysFileRepository sysFileRepository;
+    private final Clock clock;
 
     public AppointmentService(
             AppointmentRecordRepository appointmentRecordRepository,
             UserRepository userRepository,
-            SysFileRepository sysFileRepository) {
+            SysFileRepository sysFileRepository,
+            Clock clock) {
         this.appointmentRecordRepository = appointmentRecordRepository;
         this.userRepository = userRepository;
         this.sysFileRepository = sysFileRepository;
+        this.clock = clock;
     }
 
     @Transactional(readOnly = true)
@@ -129,6 +148,11 @@ public class AppointmentService {
     private void mapEditableFields(AppointmentRecord record, AppointmentRecordRequest request) {
         validatePhotoFile(request.photoFileId());
 
+        // 看板所属公司可不填，后端统一落默认值，避免前端遗漏导致非空列写入失败。
+        record.setCompanyName(defaultCompanyName(request.companyName()));
+        // 所属部门是看板分组字段，只允许预置单选项，避免写入不可展示的自由文本。
+        record.setDepartmentName(validateDepartmentName(request.departmentName()));
+
         record.setName(request.name());
         record.setPhone(request.phone());
         record.setIdCard(request.idCard());
@@ -140,6 +164,7 @@ public class AppointmentService {
         record.setGender(request.gender());
         record.setBirthDate(request.birthDate());
         record.setEthnicity(request.ethnicity());
+        record.setPoliticalStatus(request.politicalStatus());
         record.setNativePlace(request.nativePlace());
         record.setBirthPlace(request.birthPlace());
         record.setPartyJoinDate(request.partyJoinDate());
@@ -148,9 +173,16 @@ public class AppointmentService {
         record.setTechnicalPosition(request.technicalPosition());
         record.setSpecialty(request.specialty());
         record.setFullTimeEducation(request.fullTimeEducation());
+        record.setFullTimeEducationDegree(request.fullTimeEducationDegree());
+        record.setFullTimeSchool(request.fullTimeSchool());
+        record.setFullTimeMajor(request.fullTimeMajor());
         record.setFullTimeSchoolMajor(request.fullTimeSchoolMajor());
         record.setInServiceEducation(request.inServiceEducation());
         record.setInServiceSchoolMajor(request.inServiceSchoolMajor());
+        record.setPartTimeEducation(request.partTimeEducation());
+        record.setPartTimeDegree(request.partTimeDegree());
+        record.setPartTimeSchool(request.partTimeSchool());
+        record.setPartTimeMajor(request.partTimeMajor());
         record.setCurrentPosition(request.currentPosition());
         record.setProposedPosition(request.proposedPosition());
         record.setProposedRemovalPosition(request.proposedRemovalPosition());
@@ -165,7 +197,27 @@ public class AppointmentService {
         record.setAdministrativeAppointmentOpinion(request.administrativeAppointmentOpinion());
         record.setAdministrativeAppointmentDate(request.administrativeAppointmentDate());
         record.setFormFiller(request.formFiller());
+        record.setMaritalStatus(request.maritalStatus());
+        record.setRemark(request.remark());
         record.setPhotoFileId(request.photoFileId());
+    }
+
+    private String defaultCompanyName(String companyName) {
+        if (companyName == null || companyName.isBlank()) {
+            return DEFAULT_COMPANY_NAME;
+        }
+        return companyName.trim();
+    }
+
+    private String validateDepartmentName(String departmentName) {
+        if (departmentName == null || departmentName.isBlank()) {
+            throw new BusinessException("所属部门不能为空");
+        }
+        String normalizedDepartmentName = departmentName.trim();
+        if (!APPOINTMENT_BOARD_DEPARTMENTS.contains(normalizedDepartmentName)) {
+            throw new BusinessException("所属部门必须选择预置部门");
+        }
+        return normalizedDepartmentName;
     }
 
     private void validatePhotoFile(Long photoFileId) {
@@ -212,17 +264,39 @@ public class AppointmentService {
     private AppointmentSummaryResponse toSummaryResponse(AppointmentRecord record) {
         return new AppointmentSummaryResponse(
                 record.getId(),
+                record.getGlobalSequence(),
+                record.getDisplaySequence(),
+                record.getCompanyName(),
+                record.getDepartmentName(),
                 record.getName(),
-                record.getPhone(),
+                record.getCurrentPosition(),
+                record.getGender(),
+                record.getEthnicity(),
                 record.getIdCard(),
-                record.getPositionName(),
-                record.getGraduationSchool(),
-                record.getAddress());
+                calculateAge(record.getBirthDate()),
+                record.getPoliticalStatus(),
+                record.getFullTimeEducation(),
+                record.getFullTimeEducationDegree(),
+                record.getFullTimeSchool(),
+                record.getFullTimeMajor(),
+                record.getPartTimeEducation(),
+                record.getPartTimeDegree(),
+                record.getPartTimeSchool(),
+                record.getPartTimeMajor(),
+                record.getTechnicalPosition(),
+                record.getPhone(),
+                record.getMaritalStatus(),
+                record.getRemark());
     }
 
     private AppointmentDetailResponse toDetailResponse(AppointmentRecord record) {
+        // 详情保留旧任免表字段，同时补充看板拆分字段，便于旧审批页和新看板并行演进。
         return new AppointmentDetailResponse(
                 record.getId(),
+                record.getGlobalSequence(),
+                record.getDisplaySequence(),
+                record.getCompanyName(),
+                record.getDepartmentName(),
                 record.getName(),
                 record.getPhone(),
                 record.getIdCard(),
@@ -231,7 +305,9 @@ public class AppointmentService {
                 record.getAddress(),
                 record.getGender(),
                 record.getBirthDate(),
+                calculateAge(record.getBirthDate()),
                 record.getEthnicity(),
+                record.getPoliticalStatus(),
                 record.getNativePlace(),
                 record.getBirthPlace(),
                 record.getPartyJoinDate(),
@@ -240,9 +316,16 @@ public class AppointmentService {
                 record.getTechnicalPosition(),
                 record.getSpecialty(),
                 record.getFullTimeEducation(),
+                record.getFullTimeEducationDegree(),
+                record.getFullTimeSchool(),
+                record.getFullTimeMajor(),
                 record.getFullTimeSchoolMajor(),
                 record.getInServiceEducation(),
                 record.getInServiceSchoolMajor(),
+                record.getPartTimeEducation(),
+                record.getPartTimeDegree(),
+                record.getPartTimeSchool(),
+                record.getPartTimeMajor(),
                 record.getCurrentPosition(),
                 record.getProposedPosition(),
                 record.getProposedRemovalPosition(),
@@ -257,12 +340,26 @@ public class AppointmentService {
                 record.getAdministrativeAppointmentOpinion(),
                 record.getAdministrativeAppointmentDate(),
                 record.getFormFiller(),
+                record.getMaritalStatus(),
+                record.getRemark(),
                 record.getPhotoFileId(),
                 record.getFamilyMembers().stream()
                         .sorted(Comparator.comparingInt(AppointmentFamilyMember::getSortOrder)
                                 .thenComparing(member -> member.getId() == null ? 0L : member.getId()))
                         .map(this::toFamilyMemberResponse)
                         .toList());
+    }
+
+    private Integer calculateAge(LocalDate birthDate) {
+        if (birthDate == null) {
+            return null;
+        }
+        LocalDate today = LocalDate.now(clock);
+        // 年龄仅按出生日期即时计算，不落库；未来出生日期视为无效数据并返回空值。
+        if (birthDate.isAfter(today)) {
+            return null;
+        }
+        return Period.between(birthDate, today).getYears();
     }
 
     private AppointmentFamilyMemberResponse toFamilyMemberResponse(AppointmentFamilyMember member) {
