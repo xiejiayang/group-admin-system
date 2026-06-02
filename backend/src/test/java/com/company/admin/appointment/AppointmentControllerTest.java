@@ -333,6 +333,55 @@ class AppointmentControllerTest {
     }
 
     @Test
+    void createsAppointmentWhenLegacyHiddenFieldsAreBlank() throws Exception {
+        String token = loginSuperadmin().token();
+        Map<String, Object> request = mutableCreateRequest();
+        request.put("positionName", "");
+        request.put("graduationSchool", "");
+        request.put("address", "");
+
+        Long appointmentId = createAppointment(token, request);
+
+        mockMvc.perform(get("/api/party-hr/appointments/{id}", appointmentId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.positionName").value(""))
+                .andExpect(jsonPath("$.data.graduationSchool").value(""))
+                .andExpect(jsonPath("$.data.address").value(""));
+    }
+
+    @Test
+    void createsAppointmentWhenLegacyHiddenFieldsAreOmitted() throws Exception {
+        String token = loginSuperadmin().token();
+        Map<String, Object> request = mutableCreateRequest();
+        request.remove("positionName");
+        request.remove("graduationSchool");
+        request.remove("address");
+
+        Long appointmentId = createAppointment(token, request);
+
+        mockMvc.perform(get("/api/party-hr/appointments/{id}", appointmentId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.positionName").value(""))
+                .andExpect(jsonPath("$.data.graduationSchool").value(""))
+                .andExpect(jsonPath("$.data.address").value(""));
+    }
+
+    @Test
+    void rejectsMissingOrBlankNewAppointmentRequiredFields() throws Exception {
+        String token = loginSuperadmin().token();
+
+        // 新版审批表保存入口的六个必填字段，前后端必须保持同一套校验契约。
+        for (String fieldName : List.of("name", "phone", "idCard", "currentPosition", "companyName", "departmentName")) {
+            assertAppointmentRequiredFieldRejected(token, fieldName, null);
+            assertAppointmentRequiredFieldRejected(token, fieldName, " ");
+        }
+    }
+
+    @Test
     void rejectsTooLongAppointmentBaseFieldBeforeDatabaseConstraint() throws Exception {
         String token = loginSuperadmin().token();
         Map<String, Object> request = mutableCreateRequest();
@@ -405,7 +454,7 @@ class AppointmentControllerTest {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.success").value(false))
-                .andExpect(jsonPath("$.message", containsString("所属部门")))
+                .andExpect(jsonPath("$.message", containsString("departmentName")))
                 .andExpect(jsonPath("$.message", not(containsString("DataIntegrity"))))
                 .andExpect(jsonPath("$.message", not(containsString("constraint"))));
     }
@@ -561,6 +610,25 @@ class AppointmentControllerTest {
                 .andExpect(jsonPath("$.message", containsString("照片文件")));
     }
 
+    private void assertAppointmentRequiredFieldRejected(String token, String fieldName, Object fieldValue) throws Exception {
+        Map<String, Object> request = mutableCreateRequest();
+        if (fieldValue == null) {
+            request.remove(fieldName);
+        } else {
+            request.put(fieldName, fieldValue);
+        }
+
+        mockMvc.perform(post("/api/party-hr/appointments")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message", containsString(fieldName)))
+                .andExpect(jsonPath("$.message", not(containsString("DataIntegrity"))))
+                .andExpect(jsonPath("$.message", not(containsString("constraint"))));
+    }
+
     private void assertAppointmentAudit(Long appointmentId, Long createdBy, Long updatedBy) {
         Map<String, Object> audit = jdbcTemplate.queryForMap(
                 "SELECT created_by, updated_by FROM appointment_record WHERE id = ?", appointmentId);
@@ -599,7 +667,7 @@ class AppointmentControllerTest {
                 Map.entry("phone", "13900001111"),
                 Map.entry("idCard", "110101199001011234"),
                 Map.entry("positionName", "党群主管"),
-                Map.entry("companyName", ""),
+                Map.entry("companyName", "集团公司"),
                 Map.entry("departmentName", "党群人力部"),
                 Map.entry("graduationSchool", "中国人民大学"),
                 Map.entry("address", "北京市朝阳区"),

@@ -177,7 +177,7 @@ public class AppointmentService {
     private void mapEditableFields(AppointmentRecord record, AppointmentRecordRequest request) {
         validatePhotoFile(request.photoFileId());
 
-        // 看板所属公司可不填，后端统一落默认值，避免前端遗漏导致非空列写入失败。
+        // 新版保存入口已要求所属公司必填，默认值逻辑保留为旧调用路径兜底。
         record.setCompanyName(defaultCompanyName(request.companyName()));
         // 所属部门是看板分组字段，只允许预置单选项，避免写入不可展示的自由文本。
         record.setDepartmentName(validateDepartmentName(request.departmentName()));
@@ -185,9 +185,10 @@ public class AppointmentService {
         record.setName(request.name());
         record.setPhone(request.phone());
         record.setIdCard(request.idCard());
-        record.setPositionName(request.positionName());
-        record.setGraduationSchool(request.graduationSchool());
-        record.setAddress(request.address());
+        // 旧看板字段已从新版审批表隐藏，但历史数据库列仍非空，省略时统一落为空串。
+        record.setPositionName(defaultLegacyHiddenText(request.positionName()));
+        record.setGraduationSchool(defaultLegacyHiddenText(request.graduationSchool()));
+        record.setAddress(defaultLegacyHiddenText(request.address()));
 
         // 以下映射与任免审批 Word 表单字段一一对应，便于后续按原表单版式回填或导出。
         record.setGender(request.gender());
@@ -236,6 +237,10 @@ public class AppointmentService {
             return DEFAULT_COMPANY_NAME;
         }
         return companyName.trim();
+    }
+
+    private String defaultLegacyHiddenText(String value) {
+        return value == null ? "" : value;
     }
 
     private String validateDepartmentName(String departmentName) {

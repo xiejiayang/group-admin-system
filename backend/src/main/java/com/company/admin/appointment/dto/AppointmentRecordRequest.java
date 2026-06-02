@@ -7,6 +7,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 public record AppointmentRecordRequest(
+        // 以下必填字段与任免审批表新版保存入口保持一致。
         @NotBlank(message = "不能为空")
         @Size(max = 64)
         String name,
@@ -19,21 +20,20 @@ public record AppointmentRecordRequest(
         @Size(max = 32)
         String idCard,
 
-        @NotBlank(message = "不能为空")
         @Size(max = 100)
         String positionName,
 
+        @NotBlank(message = "不能为空")
         @Size(max = 120)
         String companyName,
 
+        @NotBlank(message = "不能为空")
         @Size(max = 120)
         String departmentName,
 
-        @NotBlank(message = "不能为空")
         @Size(max = 160)
         String graduationSchool,
 
-        @NotBlank(message = "不能为空")
         @Size(max = 255)
         String address,
 
@@ -78,6 +78,8 @@ public record AppointmentRecordRequest(
         String partTimeSchool,
         @Size(max = 160)
         String partTimeMajor,
+        // 现任职务也是新版任免审批表保存入口的必填字段。
+        @NotBlank(message = "不能为空")
         @Size(max = 255)
         String currentPosition,
         @Size(max = 255)

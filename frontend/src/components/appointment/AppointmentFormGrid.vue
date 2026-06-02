@@ -5,6 +5,8 @@ import {
   ElDatePicker,
   ElInput,
   ElInputNumber,
+  ElRadio,
+  ElRadioGroup,
   ElTable,
   ElTableColumn
 } from 'element-plus'
@@ -13,6 +15,7 @@ import { computed, nextTick, ref, watch } from 'vue'
 import PhotoUploader from './PhotoUploader.vue'
 
 import {
+  PARTY_HR_BOARD_DEPARTMENTS,
   createEmptyFamilyMember,
   normalizeAppointmentForm,
   type AppointmentFormMode,
@@ -42,6 +45,9 @@ const applyingExternalValue = ref(false)
 
 // view 模式通过同一套网格禁用输入，create/edit 模式保持双向回填供弹窗保存。
 const isReadonly = computed(() => props.readonly ?? props.mode === 'view')
+
+// 部门选项来源于党群人力看板配置，保存时与审批表 departmentName 字段保持一致。
+const departmentOptions = PARTY_HR_BOARD_DEPARTMENTS
 
 watch(
   () => props.modelValue,
@@ -86,25 +92,37 @@ const removeFamilyMember = (index: number) => {
     <h2>任免审批表</h2>
 
     <div class="board-field-grid">
-      <label>
-        <span>电话</span>
+      <label class="board-form-field">
+        <span>所属公司</span>
+        <el-input v-model="form.companyName" :disabled="isReadonly" />
+      </label>
+      <label class="board-form-field department-field">
+        <span>所属部门</span>
+        <el-radio-group v-model="form.departmentName" class="department-radio-group" :disabled="isReadonly">
+          <el-radio v-for="department in departmentOptions" :key="department" :value="department">
+            {{ department }}
+          </el-radio>
+        </el-radio-group>
+      </label>
+      <label class="board-form-field">
+        <span>联系方式（手机长号）</span>
         <el-input v-model="form.phone" :disabled="isReadonly" />
       </label>
-      <label>
+      <label class="board-form-field">
         <span>身份证号</span>
         <el-input v-model="form.idCard" :disabled="isReadonly" />
       </label>
-      <label>
-        <span>职位</span>
-        <el-input v-model="form.positionName" :disabled="isReadonly" />
+      <label class="board-form-field">
+        <span>政治面貌</span>
+        <el-input v-model="form.politicalStatus" :disabled="isReadonly" />
       </label>
-      <label>
-        <span>毕业院校</span>
-        <el-input v-model="form.graduationSchool" :disabled="isReadonly" />
+      <label class="board-form-field">
+        <span>婚姻状况</span>
+        <el-input v-model="form.maritalStatus" :disabled="isReadonly" />
       </label>
-      <label class="wide">
-        <span>地址</span>
-        <el-input v-model="form.address" :disabled="isReadonly" />
+      <label class="board-form-field full">
+        <span>备注</span>
+        <el-input v-model="form.remark" :disabled="isReadonly" :rows="3" type="textarea" />
       </label>
     </div>
 
@@ -186,17 +204,24 @@ const removeFamilyMember = (index: number) => {
           </tr>
 
           <tr>
-            <th rowspan="2">学历学位</th>
-            <th>全日制教育</th>
-            <td colspan="2"><el-input v-model="form.fullTimeEducation" :disabled="isReadonly" /></td>
-            <th>毕业院校系及专业</th>
-            <td colspan="3"><el-input v-model="form.fullTimeSchoolMajor" :disabled="isReadonly" /></td>
+            <th>学历（全日制）</th>
+            <td><el-input v-model="form.fullTimeEducation" :disabled="isReadonly" /></td>
+            <th>学位（全日制）</th>
+            <td><el-input v-model="form.fullTimeEducationDegree" :disabled="isReadonly" /></td>
+            <th>毕业院校（全日制）</th>
+            <td><el-input v-model="form.fullTimeSchool" :disabled="isReadonly" /></td>
+            <th>专业（全日制）</th>
+            <td><el-input v-model="form.fullTimeMajor" :disabled="isReadonly" /></td>
           </tr>
           <tr>
-            <th>在职教育</th>
-            <td colspan="2"><el-input v-model="form.inServiceEducation" :disabled="isReadonly" /></td>
-            <th>毕业院校系及专业</th>
-            <td colspan="3"><el-input v-model="form.inServiceSchoolMajor" :disabled="isReadonly" /></td>
+            <th>学历（非全日制）</th>
+            <td><el-input v-model="form.partTimeEducation" :disabled="isReadonly" /></td>
+            <th>学位（非全日制）</th>
+            <td><el-input v-model="form.partTimeDegree" :disabled="isReadonly" /></td>
+            <th>毕业院校（非全日制）</th>
+            <td><el-input v-model="form.partTimeSchool" :disabled="isReadonly" /></td>
+            <th>专业（非全日制）</th>
+            <td><el-input v-model="form.partTimeMajor" :disabled="isReadonly" /></td>
           </tr>
 
           <tr>
@@ -380,7 +405,7 @@ const removeFamilyMember = (index: number) => {
   background: #ffffff;
 }
 
-.board-field-grid label {
+.board-field-grid > .board-form-field {
   display: flex;
   min-width: 0;
   flex-direction: column;
@@ -388,6 +413,36 @@ const removeFamilyMember = (index: number) => {
   color: #334155;
   font-size: 13px;
   font-weight: 600;
+}
+
+.board-field-grid .department-field {
+  grid-column: span 3;
+}
+
+.board-field-grid .full {
+  grid-column: 1 / -1;
+}
+
+.department-radio-group {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+  gap: 8px;
+  width: 100%;
+}
+
+.department-radio-group :deep(.el-radio) {
+  height: auto;
+  min-height: 34px;
+  margin-right: 0;
+  padding: 6px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  background: #f8fafc;
+}
+
+.department-radio-group :deep(.el-radio.is-checked) {
+  border-color: #2563eb;
+  background: #eff6ff;
 }
 
 .board-field-grid .wide {
@@ -509,6 +564,11 @@ const removeFamilyMember = (index: number) => {
   }
 
   .board-field-grid .wide {
+    grid-column: auto;
+  }
+
+  .board-field-grid .department-field,
+  .board-field-grid .full {
     grid-column: auto;
   }
 }
