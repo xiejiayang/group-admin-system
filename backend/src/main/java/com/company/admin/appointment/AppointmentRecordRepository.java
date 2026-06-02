@@ -1,10 +1,13 @@
 package com.company.admin.appointment;
 
+import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 public interface AppointmentRecordRepository extends JpaRepository<AppointmentRecord, Long> {
 
@@ -12,4 +15,17 @@ public interface AppointmentRecordRepository extends JpaRepository<AppointmentRe
 
     @EntityGraph(attributePaths = "familyMembers")
     Optional<AppointmentRecord> findByIdAndDeletedFalse(Long id);
+
+    @Query("select coalesce(max(a.globalSequence), 0) from AppointmentRecord a "
+            + "where a.companyName = :companyName")
+    long maxGlobalSequenceByCompanyName(@Param("companyName") String companyName);
+
+    @Query("select coalesce(max(a.globalSequence), 0) from AppointmentRecord a "
+            + "where a.companyName = :companyName and a.id <> :id")
+    long maxGlobalSequenceByCompanyNameAndIdNot(@Param("companyName") String companyName, @Param("id") Long id);
+
+    @Query("select coalesce(max(a.displaySequence), 0) from AppointmentRecord a where a.deleted = false")
+    long maxDisplaySequence();
+
+    List<AppointmentRecord> findByDeletedFalseOrderByDisplaySequenceAscIdAsc();
 }

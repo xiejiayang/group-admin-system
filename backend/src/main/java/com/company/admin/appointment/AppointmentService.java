@@ -21,6 +21,7 @@ import java.time.Period;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -92,6 +93,7 @@ public class AppointmentService {
         User operator = requirePartyHrAppointmentManager(username);
         AppointmentRecord record = new AppointmentRecord();
         mapEditableFields(record, request);
+        assignSequences(record);
         record.setCreatedBy(operator.getId());
         record.setUpdatedBy(operator.getId());
         replaceFamilyMembers(record, request.familyMembers());
@@ -102,7 +104,9 @@ public class AppointmentService {
     public AppointmentDetailResponse update(String username, Long id, AppointmentRecordRequest request) {
         User operator = requirePartyHrAppointmentManager(username);
         AppointmentRecord record = activeRecord(id);
+        String originalCompanyName = record.getCompanyName();
         mapEditableFields(record, request);
+        reassignGlobalSequenceIfCompanyChanged(record, originalCompanyName);
         record.setUpdatedBy(operator.getId());
         replaceFamilyMembers(record, request.familyMembers());
         return toDetailResponse(record);
@@ -114,6 +118,7 @@ public class AppointmentService {
         AppointmentRecord record = activeRecord(id);
         record.setDeleted(true);
         record.setUpdatedBy(operator.getId());
+        reorderDisplaySequences();
     }
 
     private User requirePartyHrAppointmentManager(String username) {
@@ -142,7 +147,31 @@ public class AppointmentService {
         if (page < 0 || size <= 0) {
             throw new BusinessException("分页参数不合法");
         }
-        return PageRequest.of(page, Math.min(size, 100), Sort.by(Sort.Direction.DESC, "id"));
+        return PageRequest.of(page, Math.min(size, 100), Sort.by(Sort.Direction.ASC, "displaySequence")
+                .and(Sort.by(Sort.Direction.ASC, "id")));
+    }
+
+    private void assignSequences(AppointmentRecord record) {
+        // 总序号按公司独立递增；序号是党群人力部任免看板的整体展示顺序。
+        record.setGlobalSequence(appointmentRecordRepository.maxGlobalSequenceByCompanyName(record.getCompanyName()) + 1);
+        record.setDisplaySequence(appointmentRecordRepository.maxDisplaySequence() + 1);
+    }
+
+    private void reassignGlobalSequenceIfCompanyChanged(AppointmentRecord record, String originalCompanyName) {
+        if (Objects.equals(originalCompanyName, record.getCompanyName())) {
+            return;
+        }
+        // 所属公司变更时总序号重新按目标公司续号，展示序号不变。
+        record.setGlobalSequence(appointmentRecordRepository.maxGlobalSequenceByCompanyNameAndIdNot(
+                record.getCompanyName(),
+                record.getId()) + 1);
+    }
+
+    private void reorderDisplaySequences() {
+        List<AppointmentRecord> records = appointmentRecordRepository.findByDeletedFalseOrderByDisplaySequenceAscIdAsc();
+        for (int index = 0; index < records.size(); index++) {
+            records.get(index).setDisplaySequence(index + 1L);
+        }
     }
 
     private void mapEditableFields(AppointmentRecord record, AppointmentRecordRequest request) {
