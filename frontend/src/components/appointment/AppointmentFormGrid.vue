@@ -93,11 +93,11 @@ const removeFamilyMember = (index: number) => {
 
     <div class="board-field-grid">
       <label class="board-form-field">
-        <span>所属公司</span>
+        <span class="required-label"><span class="required-mark" aria-hidden="true">*</span>所属公司</span>
         <el-input v-model="form.companyName" :disabled="isReadonly" />
       </label>
       <label class="board-form-field department-field">
-        <span>所属部门</span>
+        <span class="required-label"><span class="required-mark" aria-hidden="true">*</span>所属部门</span>
         <el-radio-group v-model="form.departmentName" class="department-radio-group" :disabled="isReadonly">
           <el-radio v-for="department in departmentOptions" :key="department" :value="department">
             {{ department }}
@@ -105,7 +105,7 @@ const removeFamilyMember = (index: number) => {
         </el-radio-group>
       </label>
       <label class="board-form-field">
-        <span>联系方式（手机长号）</span>
+        <span class="required-label"><span class="required-mark" aria-hidden="true">*</span>联系方式（手机长号）</span>
         <el-input v-model="form.phone" :disabled="isReadonly" />
       </label>
       <label class="board-form-field">
@@ -140,7 +140,7 @@ const removeFamilyMember = (index: number) => {
         </colgroup>
         <tbody>
           <tr>
-            <th>姓名</th>
+            <th><span class="required-label"><span class="required-mark" aria-hidden="true">*</span>姓名</span></th>
             <td><el-input v-model="form.name" :disabled="isReadonly" /></td>
             <th>性别</th>
             <td><el-input v-model="form.gender" :disabled="isReadonly" /></td>
@@ -225,7 +225,7 @@ const removeFamilyMember = (index: number) => {
           </tr>
 
           <tr>
-            <th>现任职务</th>
+            <th><span class="required-label"><span class="required-mark" aria-hidden="true">*</span>现任职务</span></th>
             <td colspan="7"><el-input v-model="form.currentPosition" :disabled="isReadonly" /></td>
           </tr>
           <tr>
@@ -447,6 +447,18 @@ const removeFamilyMember = (index: number) => {
 
 .board-field-grid .wide {
   grid-column: span 2;
+}
+
+.required-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.required-mark {
+  color: #dc2626;
+  font-weight: 700;
+  line-height: 1;
 }
 
 .approval-table-shell {

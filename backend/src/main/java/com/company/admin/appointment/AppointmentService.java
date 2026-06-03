@@ -19,9 +19,10 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.time.Period;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Objects;
+import java.util.Map;
 import java.util.Set;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -93,22 +94,24 @@ public class AppointmentService {
         User operator = requirePartyHrAppointmentManager(username);
         AppointmentRecord record = new AppointmentRecord();
         mapEditableFields(record, request);
-        assignSequences(record);
+        assignDisplaySequence(record);
+        record.setGlobalSequence(0L);
         record.setCreatedBy(operator.getId());
         record.setUpdatedBy(operator.getId());
         replaceFamilyMembers(record, request.familyMembers());
-        return toDetailResponse(appointmentRecordRepository.save(record));
+        AppointmentRecord savedRecord = appointmentRecordRepository.save(record);
+        normalizeGlobalSequences();
+        return toDetailResponse(savedRecord);
     }
 
     @Transactional
     public AppointmentDetailResponse update(String username, Long id, AppointmentRecordRequest request) {
         User operator = requirePartyHrAppointmentManager(username);
         AppointmentRecord record = activeRecord(id);
-        String originalCompanyName = record.getCompanyName();
         mapEditableFields(record, request);
-        reassignGlobalSequenceIfCompanyChanged(record, originalCompanyName);
         record.setUpdatedBy(operator.getId());
         replaceFamilyMembers(record, request.familyMembers());
+        normalizeGlobalSequences();
         return toDetailResponse(record);
     }
 
@@ -119,6 +122,7 @@ public class AppointmentService {
         record.setDeleted(true);
         record.setUpdatedBy(operator.getId());
         reorderDisplaySequences();
+        normalizeGlobalSequences();
     }
 
     private User requirePartyHrAppointmentManager(String username) {
@@ -151,20 +155,20 @@ public class AppointmentService {
                 .and(Sort.by(Sort.Direction.ASC, "id")));
     }
 
-    private void assignSequences(AppointmentRecord record) {
-        // 总序号按公司独立递增；序号是党群人力部任免看板的整体展示顺序。
-        record.setGlobalSequence(appointmentRecordRepository.maxGlobalSequenceByCompanyName(record.getCompanyName()) + 1);
+    private void assignDisplaySequence(AppointmentRecord record) {
         record.setDisplaySequence(appointmentRecordRepository.maxDisplaySequence() + 1);
     }
 
-    private void reassignGlobalSequenceIfCompanyChanged(AppointmentRecord record, String originalCompanyName) {
-        if (Objects.equals(originalCompanyName, record.getCompanyName())) {
-            return;
+    private void normalizeGlobalSequences() {
+        List<AppointmentRecord> records = appointmentRecordRepository.findByDeletedFalseOrderByDisplaySequenceAscIdAsc();
+        Map<String, Long> companySequences = new LinkedHashMap<>();
+        for (AppointmentRecord record : records) {
+            // 总序号表示“所属公司”的类别序号，同一公司下的多条任免记录必须共享同一个值。
+            Long companySequence = companySequences.computeIfAbsent(
+                    record.getCompanyName(),
+                    ignored -> (long) companySequences.size() + 1);
+            record.setGlobalSequence(companySequence);
         }
-        // 所属公司变更时总序号重新按目标公司续号，展示序号不变。
-        record.setGlobalSequence(appointmentRecordRepository.maxGlobalSequenceByCompanyNameAndIdNot(
-                record.getCompanyName(),
-                record.getId()) + 1);
     }
 
     private void reorderDisplaySequences() {
@@ -184,11 +188,12 @@ public class AppointmentService {
 
         record.setName(request.name());
         record.setPhone(request.phone());
-        record.setIdCard(request.idCard());
+        // 身份证号不再是新版保存必填项，但历史数据库列仍非空，省略时统一落为空串。
+        record.setIdCard(defaultPersistedOptionalText(request.idCard()));
         // 旧看板字段已从新版审批表隐藏，但历史数据库列仍非空，省略时统一落为空串。
-        record.setPositionName(defaultLegacyHiddenText(request.positionName()));
-        record.setGraduationSchool(defaultLegacyHiddenText(request.graduationSchool()));
-        record.setAddress(defaultLegacyHiddenText(request.address()));
+        record.setPositionName(defaultPersistedOptionalText(request.positionName()));
+        record.setGraduationSchool(defaultPersistedOptionalText(request.graduationSchool()));
+        record.setAddress(defaultPersistedOptionalText(request.address()));
 
         // 以下映射与任免审批 Word 表单字段一一对应，便于后续按原表单版式回填或导出。
         record.setGender(request.gender());
@@ -239,7 +244,7 @@ public class AppointmentService {
         return companyName.trim();
     }
 
-    private String defaultLegacyHiddenText(String value) {
+    private String defaultPersistedOptionalText(String value) {
         return value == null ? "" : value;
     }
 

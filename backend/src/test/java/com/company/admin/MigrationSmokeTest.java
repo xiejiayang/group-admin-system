@@ -140,10 +140,24 @@ class MigrationSmokeTest {
                 "党委办公室主任",
                 "中央党校",
                 "北京市");
+        isolatedJdbcTemplate.update("""
+                INSERT INTO appointment_record(name, phone, id_card, position_name, graduation_school, address)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                "same-company-second",
+                "13800000001",
+                "110101199001010001",
+                "same-company-position",
+                "same-company-school",
+                "same-company-address");
         Long recordId = isolatedJdbcTemplate.queryForObject(
                 "SELECT id FROM appointment_record WHERE phone = ?",
                 Long.class,
                 "13800000000");
+        Long sameCompanyRecordId = isolatedJdbcTemplate.queryForObject(
+                "SELECT id FROM appointment_record WHERE phone = ?",
+                Long.class,
+                "13800000001");
 
         Flyway.configure()
                 .dataSource(dataSource)
@@ -163,8 +177,13 @@ class MigrationSmokeTest {
                 .containsEntry("department_name", "党群人力部")
                 .containsEntry("current_position", "党委办公室主任")
                 .containsEntry("full_time_school", "中央党校");
-        assertThat(((Number) appointmentRecord.get("global_sequence")).longValue()).isEqualTo(recordId);
+        assertThat(((Number) appointmentRecord.get("global_sequence")).longValue()).isEqualTo(1);
         assertThat(((Number) appointmentRecord.get("display_sequence")).longValue()).isEqualTo(recordId);
+        Long sameCompanyGlobalSequence = isolatedJdbcTemplate.queryForObject(
+                "SELECT global_sequence FROM appointment_record WHERE id = ?",
+                Long.class,
+                sameCompanyRecordId);
+        assertThat(sameCompanyGlobalSequence).isEqualTo(1);
         assertThat(columnTypes(dataSource, "appointment_record"))
                 .containsEntry("global_sequence", Types.BIGINT)
                 .containsEntry("display_sequence", Types.BIGINT);

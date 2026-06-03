@@ -90,6 +90,28 @@ describe('AppointmentFormGrid', () => {
     expect(wrapper.find('input[type="radio"][value="融资管理部"]').element.checked).toBe(true)
   })
 
+  it('marks current required fields with a visible asterisk', () => {
+    const wrapper = mount(AppointmentFormGrid, {
+      props: {
+        modelValue: {},
+        mode: 'edit'
+      },
+      global: {
+        plugins: [ElementPlus]
+      }
+    })
+
+    const requiredLabels = wrapper.findAll('.required-label').map((label) => label.text())
+
+    expect(requiredLabels).toEqual([
+      '*所属公司',
+      '*所属部门',
+      '*联系方式（手机长号）',
+      '*姓名',
+      '*现任职务'
+    ])
+  })
+
   it('renders split education fields without the old combined school-major field', () => {
     const wrapper = mount(AppointmentFormGrid, {
       props: {

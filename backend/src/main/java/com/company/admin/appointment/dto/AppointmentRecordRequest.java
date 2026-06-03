@@ -7,7 +7,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 public record AppointmentRecordRequest(
-        // 以下必填字段与任免审批表新版保存入口保持一致。
+        // 必填字段与任免审批表新版保存入口保持一致：姓名、所属公司、所属部门、现任职务、联系方式。
         @NotBlank(message = "不能为空")
         @Size(max = 64)
         String name,
@@ -16,7 +16,6 @@ public record AppointmentRecordRequest(
         @Size(max = 32)
         String phone,
 
-        @NotBlank(message = "不能为空")
         @Size(max = 32)
         String idCard,
 

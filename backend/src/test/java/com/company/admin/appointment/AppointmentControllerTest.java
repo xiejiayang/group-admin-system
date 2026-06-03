@@ -215,7 +215,7 @@ class AppointmentControllerTest {
     }
 
     @Test
-    void createAssignsCompanyGlobalSequenceAndBoardDisplaySequenceThenDeleteReordersDisplaySequence() throws Exception {
+    void createAssignsCompanyTypeGlobalSequenceAndBoardDisplaySequenceThenDeleteReordersDisplaySequence() throws Exception {
         String token = loginSuperadmin().token();
 
         Long firstId = createAppointment(token, createRequest("sequence-first", "reason", List.of()));
@@ -226,8 +226,8 @@ class AppointmentControllerTest {
         Long thirdId = createAppointment(token, otherCompanyRequest);
 
         assertAppointmentSequences(token, firstId, 1, 1);
-        assertAppointmentSequences(token, secondId, 2, 2);
-        assertAppointmentSequences(token, thirdId, 1, 3);
+        assertAppointmentSequences(token, secondId, 1, 2);
+        assertAppointmentSequences(token, thirdId, 2, 3);
 
         JsonNode listedBeforeDelete = listAppointments(token);
         assertThat(listedBeforeDelete.path("data").path("items")).hasSize(3);
@@ -235,8 +235,8 @@ class AppointmentControllerTest {
         assertThat(listedBeforeDelete.path("data").path("items").get(1).path("id").asLong()).isEqualTo(secondId);
         assertThat(listedBeforeDelete.path("data").path("items").get(2).path("id").asLong()).isEqualTo(thirdId);
         assertThat(listedBeforeDelete.path("data").path("items").get(0).path("globalSequence").asLong()).isEqualTo(1);
-        assertThat(listedBeforeDelete.path("data").path("items").get(1).path("globalSequence").asLong()).isEqualTo(2);
-        assertThat(listedBeforeDelete.path("data").path("items").get(2).path("globalSequence").asLong()).isEqualTo(1);
+        assertThat(listedBeforeDelete.path("data").path("items").get(1).path("globalSequence").asLong()).isEqualTo(1);
+        assertThat(listedBeforeDelete.path("data").path("items").get(2).path("globalSequence").asLong()).isEqualTo(2);
         assertThat(listedBeforeDelete.path("data").path("items").get(0).path("displaySequence").asLong()).isEqualTo(1);
         assertThat(listedBeforeDelete.path("data").path("items").get(1).path("displaySequence").asLong()).isEqualTo(2);
         assertThat(listedBeforeDelete.path("data").path("items").get(2).path("displaySequence").asLong()).isEqualTo(3);
@@ -251,26 +251,29 @@ class AppointmentControllerTest {
         assertThat(listedAfterDelete.path("data").path("items").get(0).path("id").asLong()).isEqualTo(firstId);
         assertThat(listedAfterDelete.path("data").path("items").get(1).path("id").asLong()).isEqualTo(thirdId);
         assertThat(listedAfterDelete.path("data").path("items").get(0).path("globalSequence").asLong()).isEqualTo(1);
-        assertThat(listedAfterDelete.path("data").path("items").get(1).path("globalSequence").asLong()).isEqualTo(1);
+        assertThat(listedAfterDelete.path("data").path("items").get(1).path("globalSequence").asLong()).isEqualTo(2);
         assertThat(listedAfterDelete.path("data").path("items").get(0).path("displaySequence").asLong()).isEqualTo(1);
         assertThat(listedAfterDelete.path("data").path("items").get(1).path("displaySequence").asLong()).isEqualTo(2);
-        assertAppointmentSequences(token, thirdId, 1, 2);
+        assertAppointmentSequences(token, thirdId, 2, 2);
 
         Long fourthId = createAppointment(token, createRequest("sequence-after-deleted-company-max", "reason", List.of()));
-        assertAppointmentSequences(token, fourthId, 3, 3);
+        assertAppointmentSequences(token, fourthId, 1, 3);
 
         JsonNode listedAfterRecreate = listAppointments(token);
         assertThat(listedAfterRecreate.path("data").path("items")).hasSize(3);
         assertThat(listedAfterRecreate.path("data").path("items").get(0).path("id").asLong()).isEqualTo(firstId);
         assertThat(listedAfterRecreate.path("data").path("items").get(1).path("id").asLong()).isEqualTo(thirdId);
         assertThat(listedAfterRecreate.path("data").path("items").get(2).path("id").asLong()).isEqualTo(fourthId);
+        assertThat(listedAfterRecreate.path("data").path("items").get(0).path("globalSequence").asLong()).isEqualTo(1);
+        assertThat(listedAfterRecreate.path("data").path("items").get(1).path("globalSequence").asLong()).isEqualTo(2);
+        assertThat(listedAfterRecreate.path("data").path("items").get(2).path("globalSequence").asLong()).isEqualTo(1);
         assertThat(listedAfterRecreate.path("data").path("items").get(0).path("displaySequence").asLong()).isEqualTo(1);
         assertThat(listedAfterRecreate.path("data").path("items").get(1).path("displaySequence").asLong()).isEqualTo(2);
         assertThat(listedAfterRecreate.path("data").path("items").get(2).path("displaySequence").asLong()).isEqualTo(3);
     }
 
     @Test
-    void updateCompanyReassignsGlobalSequenceWithoutChangingDisplaySequence() throws Exception {
+    void updateCompanyNormalizesGlobalSequenceWithoutChangingDisplaySequence() throws Exception {
         String token = loginSuperadmin().token();
         Map<String, Object> companyARequest = mutableCreateRequest();
         companyARequest.put("name", "company-a-record");
@@ -283,7 +286,7 @@ class AppointmentControllerTest {
         Long companyBId = createAppointment(token, companyBRequest);
 
         assertAppointmentSequences(token, companyAId, 1, 1);
-        assertAppointmentSequences(token, companyBId, 1, 2);
+        assertAppointmentSequences(token, companyBId, 2, 2);
 
         Map<String, Object> movedToCompanyBRequest = mutableCreateRequest();
         movedToCompanyBRequest.put("name", "company-a-moved-to-b");
@@ -295,14 +298,14 @@ class AppointmentControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.companyName").value("Company B"))
-                .andExpect(jsonPath("$.data.globalSequence").value(2))
+                .andExpect(jsonPath("$.data.globalSequence").value(1))
                 .andExpect(jsonPath("$.data.displaySequence").value(1));
 
         assertAppointmentSequences(token, companyBId, 1, 2);
         JsonNode listed = listAppointments(token);
         assertThat(listed.path("data").path("items")).hasSize(2);
         assertThat(listed.path("data").path("items").get(0).path("id").asLong()).isEqualTo(companyAId);
-        assertThat(listed.path("data").path("items").get(0).path("globalSequence").asLong()).isEqualTo(2);
+        assertThat(listed.path("data").path("items").get(0).path("globalSequence").asLong()).isEqualTo(1);
         assertThat(listed.path("data").path("items").get(0).path("displaySequence").asLong()).isEqualTo(1);
         assertThat(listed.path("data").path("items").get(1).path("id").asLong()).isEqualTo(companyBId);
         assertThat(listed.path("data").path("items").get(1).path("globalSequence").asLong()).isEqualTo(1);
@@ -371,11 +374,52 @@ class AppointmentControllerTest {
     }
 
     @Test
+    void createsAppointmentWhenIdCardIsBlankOrOmitted() throws Exception {
+        String token = loginSuperadmin().token();
+
+        Map<String, Object> blankRequest = mutableCreateRequest();
+        blankRequest.put("name", "blank-id-card-user");
+        blankRequest.put("idCard", "");
+        Long blankAppointmentId = createAppointment(token, blankRequest);
+
+        Map<String, Object> omittedRequest = mutableCreateRequest();
+        omittedRequest.put("name", "omitted-id-card-user");
+        omittedRequest.remove("idCard");
+        Long omittedAppointmentId = createAppointment(token, omittedRequest);
+
+        mockMvc.perform(get("/api/party-hr/appointments/{id}", blankAppointmentId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.idCard").value(""));
+
+        mockMvc.perform(get("/api/party-hr/appointments/{id}", omittedAppointmentId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.idCard").value(""));
+
+        mockMvc.perform(get("/api/party-hr/appointments")
+                        .param("page", "0")
+                        .param("size", "10")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.items[*].name", hasItem("blank-id-card-user")))
+                .andExpect(jsonPath("$.data.items[*].name", hasItem("omitted-id-card-user")))
+                .andExpect(jsonPath("$.data.items[*].companyName", hasItem("集团公司")))
+                .andExpect(jsonPath("$.data.items[*].departmentName", hasItem("党群人力部")))
+                .andExpect(jsonPath("$.data.items[*].currentPosition", hasItem("党群主管")))
+                .andExpect(jsonPath("$.data.items[*].phone", hasItem("13900001111")))
+                .andExpect(jsonPath("$.data.items[*].idCard", hasItem("")));
+    }
+
+    @Test
     void rejectsMissingOrBlankNewAppointmentRequiredFields() throws Exception {
         String token = loginSuperadmin().token();
 
-        // 新版审批表保存入口的六个必填字段，前后端必须保持同一套校验契约。
-        for (String fieldName : List.of("name", "phone", "idCard", "currentPosition", "companyName", "departmentName")) {
+        // 新版审批表保存入口的五个必填字段，前后端必须保持同一套校验契约。
+        for (String fieldName : List.of("name", "companyName", "departmentName", "currentPosition", "phone")) {
             assertAppointmentRequiredFieldRejected(token, fieldName, null);
             assertAppointmentRequiredFieldRejected(token, fieldName, " ");
         }

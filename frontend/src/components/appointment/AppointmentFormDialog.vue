@@ -107,11 +107,10 @@ const validateRequiredFields = (payload: AppointmentFormPayload) => {
   // 保存校验只检查当前审批表必填字段，避免旧看板字段阻断提交。
   const requiredValues = [
     payload.name,
-    payload.phone,
-    payload.idCard,
-    payload.currentPosition,
     payload.companyName,
-    payload.departmentName
+    payload.departmentName,
+    payload.currentPosition,
+    payload.phone
   ]
 
   return requiredValues.every((value) => value.trim().length > 0)
@@ -125,7 +124,7 @@ const handleSave = async () => {
   const payload = sanitizeAppointmentPayload(form.value)
 
   if (!validateRequiredFields(payload)) {
-    ElMessage.warning('请填写姓名、联系方式（手机长号）、身份证号、现任职务、所属公司和所属部门')
+    ElMessage.warning('请填写姓名、所属公司、所属部门、现任职务和联系方式（手机长号）')
     return
   }
 
