@@ -286,6 +286,42 @@ class SystemControllerTest {
     }
 
     @Test
+    void superadminCannotAssignHiddenDepartmentUserRoleToOrdinaryPartyHrUser() throws Exception {
+        String token = loginSuperadmin().token();
+        AuthPayload user = registerUser("task4_hidden_role", "PARTY_HR");
+
+        mockMvc.perform(put("/api/system/users/{userId}/roles", user.id())
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "roleCodes", java.util.List.of("DEPARTMENT_USER", "PARTY_HR_USER")))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false));
+
+        assertThat(assignedRoleCodes(user.id()))
+                .contains("DEPARTMENT_USER", "PARTY_HR_USER")
+                .doesNotContain("SUPER_ADMIN");
+    }
+
+    @Test
+    void superadminCannotAssignSuperAdminRoleToOrdinaryPartyHrUser() throws Exception {
+        String token = loginSuperadmin().token();
+        AuthPayload user = registerUser("task4_super_role", "PARTY_HR");
+
+        mockMvc.perform(put("/api/system/users/{userId}/roles", user.id())
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "roleCodes", java.util.List.of("SUPER_ADMIN")))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false));
+
+        assertThat(assignedRoleCodes(user.id()))
+                .contains("DEPARTMENT_USER", "PARTY_HR_USER")
+                .doesNotContain("SUPER_ADMIN");
+    }
+
+    @Test
     void departmentAdminAssignsVisibleRoleAndPreservesDepartmentBaseRole() throws Exception {
         AuthPayload admin = registerUser("task4_party_admin_base", "PARTY_HR");
         AuthPayload target = registerUser("task4_party_base_target", "PARTY_HR");
