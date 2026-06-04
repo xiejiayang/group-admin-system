@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 
 import com.company.admin.common.BusinessException;
 import com.company.admin.system.dto.AssignRolesRequest;
+import com.company.admin.system.dto.RoleResponse;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -29,6 +30,9 @@ class SystemServiceTest {
     @Mock
     private RoleRepository roleRepository;
 
+    @Mock
+    private OperationLogService operationLogService;
+
     private SystemService systemService;
 
     @BeforeEach
@@ -37,7 +41,8 @@ class SystemServiceTest {
                 menuRepository,
                 userRepository,
                 roleRepository,
-                new DepartmentAccessPolicy());
+                new DepartmentAccessPolicy(),
+                operationLogService);
     }
 
     @Test
@@ -45,25 +50,82 @@ class SystemServiceTest {
         User superadmin = user(1L, "superadmin", role("SUPER_ADMIN"));
         Role departmentRole = role("DEPARTMENT_USER");
 
+        when(userRepository.findByUsernameAndDeletedFalse("superadmin")).thenReturn(Optional.of(superadmin));
         when(userRepository.findByIdAndDeletedFalse(1L)).thenReturn(Optional.of(superadmin));
         when(roleRepository.findByCodeInAndEnabledTrue(any())).thenReturn(List.of(departmentRole));
         when(userRepository.lockEnabledUsersWithRoleCode("SUPER_ADMIN")).thenReturn(List.of(superadmin));
 
         BusinessException exception = assertThrows(
                 BusinessException.class,
-                () -> systemService.assignRoles(1L, new AssignRolesRequest(List.of("DEPARTMENT_USER"))));
+                () -> systemService.assignRoles("superadmin", 1L, new AssignRolesRequest(List.of("DEPARTMENT_USER"))));
 
         assertThat(exception.getMessage()).isEqualTo("至少保留一个超级管理员");
         verify(userRepository).lockEnabledUsersWithRoleCode("SUPER_ADMIN");
         assertThat(superadmin.getRoles()).extracting(Role::getCode).containsExactly("SUPER_ADMIN");
     }
 
+    @Test
+    void partyHrAdminRolesForDepartmentTargetOnlyIncludePartyHrAdminAndUserRoles() {
+        User operator = user(2L, "party_admin", department("PARTY_HR", "党群人力部"), role("PARTY_HR_ADMIN"));
+        User target = user(3L, "party_user", department("PARTY_HR", "党群人力部"), role("PARTY_HR_USER"));
+
+        when(userRepository.findByUsernameAndDeletedFalse("party_admin")).thenReturn(Optional.of(operator));
+        when(userRepository.findByIdAndDeletedFalse(3L)).thenReturn(Optional.of(target));
+        when(roleRepository.findByEnabledTrueOrderByIdAsc()).thenReturn(List.of(
+                role("SUPER_ADMIN"),
+                role("DEPARTMENT_USER"),
+                role("PARTY_HR_ADMIN"),
+                role("PARTY_HR_USER"),
+                role("GENERAL_ADMIN_MANAGER"),
+                role("GENERAL_ADMIN_USER")));
+
+        List<RoleResponse> responses = systemService.roles("party_admin", 3L);
+
+        assertThat(responses).extracting(RoleResponse::code)
+                .containsExactly("PARTY_HR_ADMIN", "PARTY_HR_USER");
+    }
+
+    @Test
+    void departmentUserCannotReadUsers() {
+        User operator = user(4L, "party_user", department("PARTY_HR", "党群人力部"), role("PARTY_HR_USER"));
+
+        when(userRepository.findByUsernameAndDeletedFalse("party_user")).thenReturn(Optional.of(operator));
+
+        BusinessException exception = assertThrows(
+                BusinessException.class,
+                () -> systemService.users("party_user"));
+
+        assertThat(exception.getStatus().value()).isEqualTo(403);
+    }
+
+    @Test
+    void assignRolesRecordsOperationLogAfterSaving() {
+        User operator = user(5L, "superadmin", role("SUPER_ADMIN"));
+        User target = user(6L, "party_user", department("PARTY_HR", "党群人力部"), role("PARTY_HR_USER"));
+        Role partyHrAdmin = role("PARTY_HR_ADMIN");
+
+        when(userRepository.findByUsernameAndDeletedFalse("superadmin")).thenReturn(Optional.of(operator));
+        when(userRepository.findByIdAndDeletedFalse(6L)).thenReturn(Optional.of(target));
+        when(roleRepository.findByCodeInAndEnabledTrue(any())).thenReturn(List.of(partyHrAdmin));
+
+        systemService.assignRoles("superadmin", 6L, new AssignRolesRequest(List.of("PARTY_HR_ADMIN")));
+
+        verify(operationLogService).recordRoleAssigned(operator, target, List.of(partyHrAdmin));
+        assertThat(target.getRoles()).extracting(Role::getCode).containsExactly("PARTY_HR_ADMIN");
+    }
+
     private User user(Long id, String username, Role... roles) {
+        return user(id, username, null, roles);
+    }
+
+    private User user(Long id, String username, Department department, Role... roles) {
         User user = new User();
         ReflectionTestUtils.setField(user, "id", id);
         user.setUsername(username);
+        user.setRealName(username + "_real");
         user.setPhone("00000000000");
         user.setPasswordHash("encoded-password");
+        user.setDepartment(department);
         user.setStatus(User.STATUS_ENABLED);
         user.setDeleted(false);
         user.getRoles().addAll(List.of(roles));
@@ -76,5 +138,13 @@ class SystemServiceTest {
         ReflectionTestUtils.setField(role, "name", code);
         ReflectionTestUtils.setField(role, "enabled", true);
         return role;
+    }
+
+    private Department department(String code, String name) {
+        Department department = new Department();
+        ReflectionTestUtils.setField(department, "code", code);
+        ReflectionTestUtils.setField(department, "name", name);
+        ReflectionTestUtils.setField(department, "enabled", true);
+        return department;
     }
 }

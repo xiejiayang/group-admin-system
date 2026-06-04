@@ -13,19 +13,28 @@ public class DepartmentAccessPolicy {
 
     public static final String SUPER_ADMIN_ROLE = "SUPER_ADMIN";
     public static final String DEFAULT_DEPARTMENT_ROLE = "DEPARTMENT_USER";
+    public static final String PARTY_HR_ADMIN_ROLE = "PARTY_HR_ADMIN";
+    public static final String GENERAL_ADMIN_MANAGER_ROLE = "GENERAL_ADMIN_MANAGER";
+    public static final String PARTY_HR_USER = "PARTY_HR_USER";
+    public static final String GENERAL_ADMIN_USER = "GENERAL_ADMIN_USER";
 
-    private static final String PARTY_HR_ROLE = "PARTY_HR_USER";
-    private static final String GENERAL_ADMIN_ROLE = "GENERAL_ADMIN_USER";
+    private static final String PARTY_HR_DEPARTMENT = "PARTY_HR";
+    private static final String GENERAL_ADMIN_DEPARTMENT = "GENERAL_ADMIN";
 
     private static final Map<String, DepartmentMenuAccess> DEPARTMENT_MENU_ACCESS = Map.of(
-            "PARTY_HR", new DepartmentMenuAccess("/party-hr", "menu:party-hr"),
-            "GENERAL_ADMIN", new DepartmentMenuAccess("/general-admin", "menu:general-admin"));
+            PARTY_HR_DEPARTMENT, new DepartmentMenuAccess("/party-hr", "menu:party-hr"),
+            GENERAL_ADMIN_DEPARTMENT, new DepartmentMenuAccess("/general-admin", "menu:general-admin"));
 
     private static final Map<String, String> DEPARTMENT_ROLE_CODES = Map.of(
-            "PARTY_HR", PARTY_HR_ROLE,
-            "GENERAL_ADMIN", GENERAL_ADMIN_ROLE);
+            PARTY_HR_DEPARTMENT, PARTY_HR_USER,
+            GENERAL_ADMIN_DEPARTMENT, GENERAL_ADMIN_USER);
 
-    // 未来新增部门时，应优先扩展本策略；如果部门/菜单/角色变为运营配置，则升级为数据库配置。
+    private static final Map<String, Set<String>> DEPARTMENT_ASSIGNABLE_ROLE_CODES = Map.of(
+            PARTY_HR_DEPARTMENT, linkedRoleSet(DEFAULT_DEPARTMENT_ROLE, PARTY_HR_ADMIN_ROLE, PARTY_HR_USER),
+            GENERAL_ADMIN_DEPARTMENT,
+                    linkedRoleSet(DEFAULT_DEPARTMENT_ROLE, GENERAL_ADMIN_MANAGER_ROLE, GENERAL_ADMIN_USER));
+
+    // 目前部门、菜单、角色仍是固定业务域；后续新增部门时，应在这里同步扩展映射，避免配置分散。
     public Set<String> registerDepartmentCodes() {
         return DEPARTMENT_ROLE_CODES.keySet();
     }
@@ -58,18 +67,8 @@ public class DepartmentAccessPolicy {
     }
 
     public void validateRoleAssignment(User user, Set<String> roleCodes) {
-        // 后端必须校验部门和角色兼容性，防止绕过菜单直接调用跨部门接口拿到越权能力。
-        if (roleCodes.contains(PARTY_HR_ROLE) && roleCodes.contains(GENERAL_ADMIN_ROLE)) {
-            throw new BusinessException("普通用户不能同时拥有多个部门细分角色");
-        }
-
-        String departmentCode = departmentCode(user);
-        if (departmentCode == null) {
-            validateSystemUserRoles(roleCodes);
-            return;
-        }
-
-        Set<String> allowedRoleCodes = allowedRoleCodesForDepartment(departmentCode);
+        // 角色分配必须以后端目标用户所属部门为准，防止绕过前端菜单后混用跨部门管理员或用户角色。
+        Set<String> allowedRoleCodes = assignableRoleCodes(user);
         List<String> invalidCodes = roleCodes.stream()
                 .filter(code -> !allowedRoleCodes.contains(code))
                 .toList();
@@ -78,30 +77,27 @@ public class DepartmentAccessPolicy {
         }
     }
 
-    private Set<String> allowedRoleCodesForDepartment(String departmentCode) {
-        return departmentRoleCode(departmentCode)
-                .map(departmentRole -> {
-                    Set<String> allowed = new LinkedHashSet<>();
-                    allowed.add(DEFAULT_DEPARTMENT_ROLE);
-                    allowed.add(departmentRole);
-                    allowed.add(SUPER_ADMIN_ROLE);
-                    return allowed;
-                })
-                .orElseGet(() -> Set.of(SUPER_ADMIN_ROLE));
+    public Set<String> assignableRoleCodes(User user) {
+        String departmentCode = departmentCode(user);
+        if (departmentCode == null) {
+            return Set.of(SUPER_ADMIN_ROLE);
+        }
+        return DEPARTMENT_ASSIGNABLE_ROLE_CODES.getOrDefault(departmentCode, Set.of());
     }
 
-    private void validateSystemUserRoles(Set<String> roleCodes) {
-        List<String> invalidCodes = roleCodes.stream()
-                .filter(code -> !SUPER_ADMIN_ROLE.equals(code))
-                .toList();
-        if (!invalidCodes.isEmpty()) {
-            throw new BusinessException("系统级用户不允许分配部门角色: " + String.join(",", invalidCodes));
-        }
+    public Set<String> visibleAssignableRoleCodes(User user) {
+        Set<String> roleCodes = new LinkedHashSet<>(assignableRoleCodes(user));
+        roleCodes.remove(DEFAULT_DEPARTMENT_ROLE);
+        return roleCodes;
     }
 
     private String departmentCode(User user) {
         Department department = user.getDepartment();
         return department == null ? null : department.getCode();
+    }
+
+    private static Set<String> linkedRoleSet(String... roleCodes) {
+        return new LinkedHashSet<>(List.of(roleCodes));
     }
 
     private record DepartmentMenuAccess(String path, String permissionCode) {

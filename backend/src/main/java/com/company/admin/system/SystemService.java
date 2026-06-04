@@ -3,6 +3,7 @@ package com.company.admin.system;
 import com.company.admin.common.BusinessException;
 import com.company.admin.system.dto.AssignRolesRequest;
 import com.company.admin.system.dto.MenuResponse;
+import com.company.admin.system.dto.OperationLogResponse;
 import com.company.admin.system.dto.RoleResponse;
 import com.company.admin.system.dto.UserResponse;
 import java.util.Comparator;
@@ -19,27 +20,33 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class SystemService {
 
+    private static final String PARTY_HR_DEPARTMENT = "PARTY_HR";
+    private static final String GENERAL_ADMIN_DEPARTMENT = "GENERAL_ADMIN";
+    private static final String SETTINGS_MENU_PERMISSION = "menu:settings";
+    private static final String BOOTSTRAP_SUPERADMIN_USERNAME = "superadmin";
+
     private final MenuRepository menuRepository;
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
     private final DepartmentAccessPolicy departmentAccessPolicy;
+    private final OperationLogService operationLogService;
 
     public SystemService(
             MenuRepository menuRepository,
             UserRepository userRepository,
             RoleRepository roleRepository,
-            DepartmentAccessPolicy departmentAccessPolicy) {
+            DepartmentAccessPolicy departmentAccessPolicy,
+            OperationLogService operationLogService) {
         this.menuRepository = menuRepository;
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
         this.departmentAccessPolicy = departmentAccessPolicy;
+        this.operationLogService = operationLogService;
     }
 
     @Transactional(readOnly = true)
     public List<MenuResponse> currentUserMenus(String username) {
-        User user = userRepository.findByUsernameAndDeletedFalse(username)
-                .filter(this::isEnabled)
-                .orElseThrow(() -> new BusinessException(HttpStatus.UNAUTHORIZED, "认证失败，请重新登录"));
+        User user = currentOperator(username);
 
         Set<String> permissionCodes = enabledPermissionCodes(user);
         Set<String> visiblePermissionCodes = visibleMenuPermissionCodes(user, permissionCodes);
@@ -54,23 +61,48 @@ public class SystemService {
     }
 
     @Transactional(readOnly = true)
-    public List<UserResponse> users() {
-        return userRepository.findByDeletedFalseOrderByIdAsc().stream()
+    public List<UserResponse> users(String operatorUsername) {
+        User operator = currentOperator(operatorUsername);
+        List<User> users = userRepository.findByDeletedFalseOrderByIdAsc();
+        if (hasRole(operator, DepartmentAccessPolicy.SUPER_ADMIN_ROLE)) {
+            return users.stream()
+                    .map(this::toUserResponse)
+                    .toList();
+        }
+
+        String managedDepartmentCode = managedDepartmentCode(operator);
+        if (managedDepartmentCode == null) {
+            throw forbidden();
+        }
+
+        return users.stream()
+                .filter(user -> managedDepartmentCode.equals(departmentCode(user)))
                 .map(this::toUserResponse)
                 .toList();
     }
 
     @Transactional(readOnly = true)
-    public List<RoleResponse> roles() {
+    public List<RoleResponse> roles(String operatorUsername, Long targetUserId) {
+        User operator = currentOperator(operatorUsername);
+        User target = targetUser(targetUserId);
+        ensureCanManageTarget(operator, target);
+
+        Set<String> visibleRoleCodes = isSuperAdminTarget(target)
+                ? Set.of(DepartmentAccessPolicy.SUPER_ADMIN_ROLE)
+                : departmentAccessPolicy.visibleAssignableRoleCodes(target);
+
         return roleRepository.findByEnabledTrueOrderByIdAsc().stream()
+                .filter(role -> visibleRoleCodes.contains(role.getCode()))
                 .map(this::toRoleResponse)
                 .toList();
     }
 
     @Transactional
-    public UserResponse assignRoles(Long userId, AssignRolesRequest request) {
-        User user = userRepository.findByIdAndDeletedFalse(userId)
-                .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND, "用户不存在"));
+    public UserResponse assignRoles(String operatorUsername, Long userId, AssignRolesRequest request) {
+        User operator = currentOperator(operatorUsername);
+        User user = targetUser(userId);
+        ensureCanManageTarget(operator, user);
+
         Set<String> requestedCodes = request.roleCodes().stream()
                 .map(String::trim)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
@@ -93,10 +125,14 @@ public class SystemService {
         if (removingSuperAdmin) {
             List<User> lockedSuperAdmins =
                     userRepository.lockEnabledUsersWithRoleCode(DepartmentAccessPolicy.SUPER_ADMIN_ROLE);
-            // 事务内悲观锁定现有超级管理员，避免并发移除导致系统无人可管理。
+            // 移除超级管理员前必须在同一事务内锁定现有超级管理员，避免并发保存导致系统无人可管。
             if (lockedSuperAdmins.size() <= 1) {
                 throw new BusinessException("至少保留一个超级管理员");
             }
+        }
+
+        if (isSuperAdminTarget(user) && !Set.of(DepartmentAccessPolicy.SUPER_ADMIN_ROLE).equals(requestedCodes)) {
+            throw new BusinessException("超级管理员账号只允许分配超级管理员角色");
         }
         departmentAccessPolicy.validateRoleAssignment(user, requestedCodes);
 
@@ -104,7 +140,22 @@ public class SystemService {
         requestedCodes.stream()
                 .map(rolesByCode::get)
                 .forEach(user.getRoles()::add);
+        operationLogService.recordRoleAssigned(operator, user, roles);
         return toUserResponse(user);
+    }
+
+    @Transactional(readOnly = true)
+    public List<OperationLogResponse> operationLogs(String operatorUsername) {
+        User operator = currentOperator(operatorUsername);
+        if (hasRole(operator, DepartmentAccessPolicy.SUPER_ADMIN_ROLE)) {
+            return operationLogService.listAll();
+        }
+
+        if (isDepartmentAdmin(operator)) {
+            return operationLogService.listByDepartment(departmentName(operator));
+        }
+
+        throw forbidden();
     }
 
     private Set<String> visibleMenuPermissionCodes(User user, Set<String> permissionCodes) {
@@ -112,16 +163,63 @@ public class SystemService {
             return permissionCodes;
         }
 
-        Department department = user.getDepartment();
-        String departmentCode = department == null ? null : department.getCode();
-        String departmentMenuPermission = departmentAccessPolicy.departmentMenuPermissionCode(departmentCode)
+        Set<String> visiblePermissionCodes = new LinkedHashSet<>();
+        String departmentMenuPermission = departmentAccessPolicy.departmentMenuPermissionCode(departmentCode(user))
                 .orElse(null);
-        if (departmentMenuPermission == null || !permissionCodes.contains(departmentMenuPermission)) {
-            return Set.of();
+        if (departmentMenuPermission != null && permissionCodes.contains(departmentMenuPermission)) {
+            visiblePermissionCodes.add(departmentMenuPermission);
         }
 
-        // 菜单以“当前用户权限 + 所属部门”裁剪，避免跨部门菜单泄露。
-        return Set.of(departmentMenuPermission);
+        // 部门管理员除了本部门业务菜单，还能看到设置入口；普通部门用户即使伪造请求也不会获得设置菜单。
+        if (isDepartmentAdmin(user) && permissionCodes.contains(SETTINGS_MENU_PERMISSION)) {
+            visiblePermissionCodes.add(SETTINGS_MENU_PERMISSION);
+        }
+        return visiblePermissionCodes;
+    }
+
+    private void ensureCanManageTarget(User operator, User target) {
+        if (hasRole(operator, DepartmentAccessPolicy.SUPER_ADMIN_ROLE)) {
+            return;
+        }
+        String managedDepartmentCode = managedDepartmentCode(operator);
+        if (managedDepartmentCode != null
+                && !isSuperAdminTarget(target)
+                && managedDepartmentCode.equals(departmentCode(target))) {
+            return;
+        }
+        throw forbidden();
+    }
+
+    private String managedDepartmentCode(User operator) {
+        if (PARTY_HR_DEPARTMENT.equals(departmentCode(operator))
+                && hasRole(operator, DepartmentAccessPolicy.PARTY_HR_ADMIN_ROLE)) {
+            return PARTY_HR_DEPARTMENT;
+        }
+        if (GENERAL_ADMIN_DEPARTMENT.equals(departmentCode(operator))
+                && hasRole(operator, DepartmentAccessPolicy.GENERAL_ADMIN_MANAGER_ROLE)) {
+            return GENERAL_ADMIN_DEPARTMENT;
+        }
+        return null;
+    }
+
+    private boolean isDepartmentAdmin(User user) {
+        return managedDepartmentCode(user) != null;
+    }
+
+    private boolean isSuperAdminTarget(User user) {
+        return BOOTSTRAP_SUPERADMIN_USERNAME.equals(user.getUsername())
+                || hasRole(user, DepartmentAccessPolicy.SUPER_ADMIN_ROLE);
+    }
+
+    private User currentOperator(String username) {
+        return userRepository.findByUsernameAndDeletedFalse(username)
+                .filter(this::isEnabled)
+                .orElseThrow(() -> new BusinessException(HttpStatus.UNAUTHORIZED, "认证失败，请重新登录"));
+    }
+
+    private User targetUser(Long userId) {
+        return userRepository.findByIdAndDeletedFalse(userId)
+                .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND, "用户不存在"));
     }
 
     private Set<String> enabledPermissionCodes(User user) {
@@ -143,6 +241,20 @@ public class SystemService {
         return User.STATUS_ENABLED.equals(user.getStatus());
     }
 
+    private String departmentCode(User user) {
+        Department department = user.getDepartment();
+        return department == null ? null : department.getCode();
+    }
+
+    private String departmentName(User user) {
+        Department department = user.getDepartment();
+        return department == null ? null : department.getName();
+    }
+
+    private BusinessException forbidden() {
+        return new BusinessException(HttpStatus.FORBIDDEN, "无权访问该资源");
+    }
+
     private MenuResponse toMenuResponse(Menu menu) {
         return new MenuResponse(
                 menu.getId(),
@@ -157,6 +269,7 @@ public class SystemService {
         return new UserResponse(
                 user.getId(),
                 user.getUsername(),
+                user.getRealName(),
                 user.getPhone(),
                 department == null ? null : department.getCode(),
                 department == null ? null : department.getName(),
