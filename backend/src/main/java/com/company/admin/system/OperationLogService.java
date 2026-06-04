@@ -3,32 +3,24 @@ package com.company.admin.system;
 import com.company.admin.system.dto.OperationLogResponse;
 import java.time.Clock;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class OperationLogService {
 
-    private static final ZoneId OPERATION_ZONE = ZoneId.of("Asia/Shanghai");
     private static final DateTimeFormatter OPERATION_TIME_FORMATTER =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     private final OperationLogRepository operationLogRepository;
     private final Clock clock;
 
-    @Autowired
-    public OperationLogService(OperationLogRepository operationLogRepository) {
-        this(operationLogRepository, Clock.system(OPERATION_ZONE));
-    }
-
-    OperationLogService(OperationLogRepository operationLogRepository, Clock clock) {
+    public OperationLogService(OperationLogRepository operationLogRepository, Clock clock) {
         this.operationLogRepository = operationLogRepository;
         this.clock = clock;
     }
@@ -53,7 +45,7 @@ public class OperationLogService {
     }
 
     @Transactional
-    public void recordAppointmentEdited(User operator, String personName) {
+    public void recordAppointmentUpdated(User operator, String personName) {
         LocalDateTime operationTime = currentOperationTime();
         saveOperation(operator, operationTime, operator.getUsername()
                 + " 于 "
@@ -63,7 +55,7 @@ public class OperationLogService {
     }
 
     @Transactional
-    public void recordRoleAssignment(User operator, User targetUser, Collection<Role> assignedRoles) {
+    public void recordRoleAssigned(User operator, User targetUser, Collection<Role> assignedRoles) {
         LocalDateTime operationTime = currentOperationTime();
         saveOperation(operator, operationTime, operator.getUsername()
                 + " 于 "
@@ -76,14 +68,14 @@ public class OperationLogService {
 
     @Transactional(readOnly = true)
     public List<OperationLogResponse> listAll() {
-        return operationLogRepository.findAll().stream()
+        return operationLogRepository.findAllByOrderByOperationTimeDescIdDesc().stream()
                 .map(this::toResponse)
                 .toList();
     }
 
     @Transactional(readOnly = true)
     public List<OperationLogResponse> listByDepartment(String departmentName) {
-        return operationLogRepository.findByOperatorDepartmentName(departmentName).stream()
+        return operationLogRepository.findByOperatorDepartmentNameOrderByOperationTimeDescIdDesc(departmentName).stream()
                 .map(this::toResponse)
                 .toList();
     }

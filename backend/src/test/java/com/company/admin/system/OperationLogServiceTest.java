@@ -1,6 +1,7 @@
 package com.company.admin.system;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -75,21 +76,21 @@ class OperationLogServiceTest {
     }
 
     @Test
-    void recordAppointmentEditedStoresExpectedContent() {
+    void recordAppointmentUpdatedStoresExpectedContent() {
         User operator = user(1L, "hradmin", "人事管理员", "13800000001", null, List.of());
 
-        operationLogService.recordAppointmentEdited(operator, "李四");
+        operationLogService.recordAppointmentUpdated(operator, "李四");
 
         OperationLog log = savedLog();
         assertThat(log.getOperationContent()).isEqualTo("hradmin 于 2026-06-04 10:03:50 编辑任免审批表：李四");
     }
 
     @Test
-    void recordRoleAssignmentStoresTargetAccountAndSortedRoleNames() {
+    void recordRoleAssignedStoresTargetAccountAndSortedRoleNames() {
         User operator = user(1L, "superadmin", "系统管理员", "13800000000", null, List.of());
         User targetUser = user(2L, "targetUser", "目标用户", "13800000002", null, List.of());
 
-        operationLogService.recordRoleAssignment(
+        operationLogService.recordRoleAssigned(
                 operator,
                 targetUser,
                 List.of(
@@ -119,7 +120,7 @@ class OperationLogServiceTest {
                 "13800000001",
                 "人力管理员",
                 "second content");
-        when(operationLogRepository.findAll()).thenReturn(List.of(first, second));
+        when(operationLogRepository.findAllByOrderByOperationTimeDescIdDesc()).thenReturn(List.of(first, second));
 
         List<OperationLogResponse> responses = operationLogService.listAll();
 
@@ -137,6 +138,8 @@ class OperationLogServiceTest {
                         "超级管理员",
                         "first content"));
         assertThat(responses.get(1).operationRecord()).isEqualTo("second content");
+        verify(operationLogRepository).findAllByOrderByOperationTimeDescIdDesc();
+        verify(operationLogRepository, never()).findAll();
     }
 
     @Test
@@ -149,7 +152,8 @@ class OperationLogServiceTest {
                 "13800000001",
                 "人力管理员",
                 "department content");
-        when(operationLogRepository.findByOperatorDepartmentName("党群人力部")).thenReturn(List.of(log));
+        when(operationLogRepository.findByOperatorDepartmentNameOrderByOperationTimeDescIdDesc("党群人力部"))
+                .thenReturn(List.of(log));
 
         List<OperationLogResponse> responses = operationLogService.listByDepartment("党群人力部");
 
@@ -164,7 +168,8 @@ class OperationLogServiceTest {
                         "13800000001",
                         "人力管理员",
                         "department content"));
-        verify(operationLogRepository).findByOperatorDepartmentName("党群人力部");
+        verify(operationLogRepository)
+                .findByOperatorDepartmentNameOrderByOperationTimeDescIdDesc("党群人力部");
     }
 
     private OperationLog savedLog() {

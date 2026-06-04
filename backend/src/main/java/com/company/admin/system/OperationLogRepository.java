@@ -5,5 +5,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface OperationLogRepository extends JpaRepository<OperationLog, Long> {
 
-    List<OperationLog> findByOperatorDepartmentName(String departmentName);
+    List<OperationLog> findAllByOrderByOperationTimeDescIdDesc();
+
+    List<OperationLog> findByOperatorDepartmentNameOrderByOperationTimeDescIdDesc(String departmentName);
 }
