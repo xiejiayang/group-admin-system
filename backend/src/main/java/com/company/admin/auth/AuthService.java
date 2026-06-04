@@ -8,6 +8,7 @@ import com.company.admin.security.JwtService;
 import com.company.admin.system.Department;
 import com.company.admin.system.DepartmentAccessPolicy;
 import com.company.admin.system.DepartmentRepository;
+import com.company.admin.system.OperationLogService;
 import com.company.admin.system.Permission;
 import com.company.admin.system.Role;
 import com.company.admin.system.RoleRepository;
@@ -34,6 +35,7 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final DepartmentAccessPolicy departmentAccessPolicy;
+    private final OperationLogService operationLogService;
 
     public AuthService(
             UserRepository userRepository,
@@ -41,13 +43,15 @@ public class AuthService {
             RoleRepository roleRepository,
             PasswordEncoder passwordEncoder,
             JwtService jwtService,
-            DepartmentAccessPolicy departmentAccessPolicy) {
+            DepartmentAccessPolicy departmentAccessPolicy,
+            OperationLogService operationLogService) {
         this.userRepository = userRepository;
         this.departmentRepository = departmentRepository;
         this.roleRepository = roleRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.departmentAccessPolicy = departmentAccessPolicy;
+        this.operationLogService = operationLogService;
     }
 
     @Transactional
@@ -62,6 +66,8 @@ public class AuthService {
         }
 
         user.setLastLoginTime(LocalDateTime.now());
+        // 密码校验成功后立即记录登录日志，保证每次成功登录都有审计轨迹。
+        operationLogService.recordLogin(user);
         return toAuthResponse(user);
     }
 
@@ -85,6 +91,8 @@ public class AuthService {
 
         User user = new User();
         user.setUsername(request.username());
+        // 真实姓名按注册提交值入库，去掉首尾空格，避免展示和日志快照出现脏数据。
+        user.setRealName(request.realName().trim());
         user.setPhone(request.phone());
         user.setDepartment(department);
         user.setStatus(User.STATUS_ENABLED);
@@ -135,6 +143,7 @@ public class AuthService {
         return new AuthResponse(
                 user.getId(),
                 user.getUsername(),
+                user.getRealName(),
                 user.getPhone(),
                 department == null ? null : department.getCode(),
                 department == null ? null : department.getName(),

@@ -52,6 +52,7 @@ class AuthControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.username").value("superadmin"))
+                .andExpect(jsonPath("$.data.realName").value("superadmin"))
                 .andExpect(jsonPath("$.data.roles", hasItem("SUPER_ADMIN")))
                 .andExpect(jsonPath("$.data.permissions", hasItem("menu:settings")))
                 .andExpect(jsonPath("$.data.token", notNullValue()));
@@ -60,18 +61,20 @@ class AuthControllerTest {
     @Test
     void departmentUserCanRegisterAndReadCurrentUserWithReturnedToken() throws Exception {
         String username = uniqueUsername("party_hr_user");
+        String realName = "Party HR Real Name";
 
         String registerBody = mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(
                                 "username", username,
-                                "realName", username,
+                                "realName", realName,
                                 "password", "StrongPass123",
                                 "phone", "13800138000",
                                 "departmentCode", "PARTY_HR"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.username").value(username))
+                .andExpect(jsonPath("$.data.realName").value(realName))
                 .andExpect(jsonPath("$.data.departmentCode").value("PARTY_HR"))
                 .andExpect(jsonPath("$.data.roles", hasItem("DEPARTMENT_USER")))
                 .andExpect(jsonPath("$.data.roles", hasItem("PARTY_HR_USER")))
@@ -91,6 +94,7 @@ class AuthControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.username").value(username))
+                .andExpect(jsonPath("$.data.realName").value(realName))
                 .andExpect(jsonPath("$.data.departmentCode").value("PARTY_HR"))
                 .andExpect(jsonPath("$.data.roles", hasItem("DEPARTMENT_USER")))
                 .andExpect(jsonPath("$.data.roles", hasItem("PARTY_HR_USER")))
