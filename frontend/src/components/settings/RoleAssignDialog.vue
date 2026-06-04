@@ -51,13 +51,20 @@ const toMessage = (error: unknown, fallback: string) => {
 }
 
 const loadRoles = async () => {
-  loading.value = true
-  roleLoadError.value = ''
-  rolesLoaded.value = false
   roles.value = []
+  rolesLoaded.value = false
+  roleLoadError.value = ''
+  loading.value = false
+
+  if (!props.user) {
+    return
+  }
+
+  loading.value = true
 
   try {
-    roles.value = await fetchRoles()
+    // 角色可选范围取决于“被分配人”，必须把目标用户 ID 传给后端统一裁剪。
+    roles.value = await fetchRoles(props.user.id)
     rolesLoaded.value = true
   } catch (error) {
     const message = toMessage(error, '角色列表加载失败')

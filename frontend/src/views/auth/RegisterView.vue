@@ -24,6 +24,7 @@ const formRef = ref<FormInstance>()
 const loading = ref(false)
 const form = reactive<RegisterRequest>({
   username: '',
+  realName: '',
   password: '',
   phone: '',
   departmentCode: 'PARTY_HR'
@@ -31,6 +32,7 @@ const form = reactive<RegisterRequest>({
 
 const rules: FormRules<typeof form> = {
   username: [{ required: true, message: '请输入账号', trigger: 'blur' }],
+  realName: [{ required: true, message: '请输入姓名', trigger: 'blur' }],
   password: [{ required: true, message: '请输入密码', trigger: 'blur' }],
   phone: [
     { required: true, message: '请输入手机号', trigger: 'blur' },
@@ -62,8 +64,10 @@ const handleRegister = async () => {
 
   try {
     const authStore = useAuthStore()
+    // 注册资料提交前统一去除首尾空格，避免姓名和账号落库后出现不可见差异。
     const user = await authStore.register({
       username: form.username.trim(),
+      realName: form.realName.trim(),
       password: form.password,
       phone: form.phone.trim(),
       departmentCode: form.departmentCode
@@ -105,6 +109,16 @@ const goLogin = async () => {
             autocomplete="username"
             :prefix-icon="User"
             placeholder="请输入账号"
+            size="large"
+          />
+        </el-form-item>
+
+        <el-form-item label="姓名" prop="realName">
+          <el-input
+            v-model="form.realName"
+            autocomplete="name"
+            :prefix-icon="User"
+            placeholder="请输入姓名"
             size="large"
           />
         </el-form-item>

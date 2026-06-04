@@ -122,6 +122,7 @@ const handleRolesSaved = async (updatedUser: SystemUser) => {
       <el-skeleton v-if="loading && !hasUsers" class="table-skeleton" animated :rows="6" />
       <el-table v-else-if="hasUsers" :data="users" row-key="id">
         <el-table-column label="账号" min-width="150" prop="username" show-overflow-tooltip />
+        <el-table-column label="姓名" min-width="120" prop="realName" show-overflow-tooltip />
         <el-table-column label="手机号" min-width="140" prop="phone" show-overflow-tooltip />
         <el-table-column label="部门" min-width="150" show-overflow-tooltip>
           <template #default="{ row }">
