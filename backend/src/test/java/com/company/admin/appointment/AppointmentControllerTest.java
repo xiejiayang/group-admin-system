@@ -793,6 +793,7 @@ class AppointmentControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(
                                 "username", username,
+                                "realName", username,
                                 "password", "StrongPass123",
                                 "phone", "13800138000",
                                 "departmentCode", departmentCode))))

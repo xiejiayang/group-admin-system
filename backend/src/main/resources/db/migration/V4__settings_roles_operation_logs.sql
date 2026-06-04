@@ -78,7 +78,7 @@ CREATE TABLE sys_operation_log (
   operator_user_id BIGINT NOT NULL,
   operator_username VARCHAR(64) NOT NULL,
   operator_real_name VARCHAR(64) NOT NULL,
-  operator_department_name VARCHAR(100) NOT NULL,
+  operator_department_name VARCHAR(100) NULL,
   operator_phone VARCHAR(32) NOT NULL,
   operator_role_names VARCHAR(512) NOT NULL,
   operation_content TEXT NOT NULL,

@@ -135,11 +135,18 @@ class MigrationSmokeTest {
                 FROM sys_permission
                 WHERE code = 'system:operation-log'
                 """, Integer.class);
+        String operationLogDepartmentNullable = jdbcTemplate.queryForObject("""
+                SELECT IS_NULLABLE
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE LOWER(TABLE_NAME) = 'sys_operation_log'
+                  AND LOWER(COLUMN_NAME) = 'operator_department_name'
+                """, String.class);
 
         assertThat(realNameColumnCount).isOne();
         assertThat(operationLogTableCount).isOne();
         assertThat(adminRoleCount).isEqualTo(2);
         assertThat(operationLogPermissionCount).isOne();
+        assertThat(operationLogDepartmentNullable).isEqualTo("YES");
     }
 
     @Test

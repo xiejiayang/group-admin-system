@@ -65,6 +65,7 @@ class AuthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(
                                 "username", username,
+                                "realName", username,
                                 "password", "StrongPass123",
                                 "phone", "13800138000",
                                 "departmentCode", "PARTY_HR"))))
@@ -107,6 +108,7 @@ class AuthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(
                                 "username", username,
+                                "realName", username,
                                 "password", "StrongPass123",
                                 "phone", "13700137000",
                                 "departmentCode", "GENERAL_ADMIN"))))
@@ -139,6 +141,7 @@ class AuthControllerTest {
         String username = uniqueUsername("duplicate_user");
         Map<String, String> request = Map.of(
                 "username", username,
+                "realName", username,
                 "password", "StrongPass123",
                 "phone", "13900139000",
                 "departmentCode", "GENERAL_ADMIN");
@@ -163,6 +166,7 @@ class AuthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(
                                 "username", "u".repeat(65),
+                                "realName", "too_long_username_user",
                                 "password", "StrongPass123",
                                 "phone", "13500135000",
                                 "departmentCode", "PARTY_HR"))))
