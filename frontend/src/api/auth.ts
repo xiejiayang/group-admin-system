@@ -6,6 +6,7 @@ export interface LoginRequest {
 }
 
 export interface RegisterRequest extends LoginRequest {
+  realName: string
   phone: string
   departmentCode: 'PARTY_HR' | 'GENERAL_ADMIN'
 }
@@ -13,6 +14,7 @@ export interface RegisterRequest extends LoginRequest {
 export interface AuthUser {
   userId: number
   username: string
+  realName: string
   phone: string
   departmentCode: string | null
   departmentName: string | null

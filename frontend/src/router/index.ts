@@ -9,6 +9,7 @@ import RegisterView from '@/views/auth/RegisterView.vue'
 import ForbiddenView from '@/views/ForbiddenView.vue'
 import GeneralAdminView from '@/views/general-admin/GeneralAdminView.vue'
 import PartyHrView from '@/views/party-hr/PartyHrView.vue'
+import SystemLogsView from '@/views/settings/SystemLogsView.vue'
 import UserSettingsView from '@/views/settings/UserSettingsView.vue'
 
 export { canAccessPath, defaultLandingPath } from '@/router/access'
@@ -56,6 +57,11 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'settings/users',
         component: UserSettingsView,
+        meta: { requiresAuth: true }
+      },
+      {
+        path: 'settings/logs',
+        component: SystemLogsView,
         meta: { requiresAuth: true }
       }
     ]

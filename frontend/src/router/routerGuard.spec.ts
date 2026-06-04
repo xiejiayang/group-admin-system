@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import type { SystemMenu } from '@/api/system'
 
-import { canAccessPath, defaultLandingPath } from './index'
+import router, { canAccessPath, defaultLandingPath } from './index'
 
 const menu = (path: string, sortOrder: number): SystemMenu => ({
   id: sortOrder,
@@ -17,8 +17,17 @@ describe('canAccessPath', () => {
     expect(canAccessPath('/settings/users', ['SUPER_ADMIN'], [])).toBe(true)
   })
 
-  it('blocks regular users from settings', () => {
+  it('allows department administrators with settings permission to access settings users and logs', () => {
+    expect(canAccessPath('/settings/users', ['PARTY_HR_ADMIN'], ['menu:settings'], 'PARTY_HR')).toBe(true)
+    expect(canAccessPath('/settings/logs', ['PARTY_HR_ADMIN'], ['menu:settings'], 'PARTY_HR')).toBe(true)
+    expect(canAccessPath('/settings/users', ['GENERAL_ADMIN_MANAGER'], ['menu:settings'], 'GENERAL_ADMIN')).toBe(true)
+    expect(canAccessPath('/settings/logs', ['GENERAL_ADMIN_MANAGER'], ['menu:settings'], 'GENERAL_ADMIN')).toBe(true)
+  })
+
+  it('blocks department users from settings', () => {
     expect(canAccessPath('/settings/users', ['GENERAL_ADMIN_USER'], ['menu:general-admin'], 'GENERAL_ADMIN')).toBe(false)
+    expect(canAccessPath('/settings/logs', ['PARTY_HR_USER'], ['menu:settings'], 'PARTY_HR')).toBe(false)
+    expect(canAccessPath('/settings/users', ['DEPARTMENT_USER'], ['menu:settings'], 'PARTY_HR')).toBe(false)
   })
 
   it('blocks PARTY_HR department users without party HR permissions from party HR', () => {
@@ -33,6 +42,12 @@ describe('canAccessPath', () => {
 
   it('allows GENERAL_ADMIN department users with general admin menu permission to access general admin', () => {
     expect(canAccessPath('/general-admin', ['DEPARTMENT_USER'], ['menu:general-admin'], 'GENERAL_ADMIN')).toBe(true)
+  })
+})
+
+describe('router settings routes', () => {
+  it('registers the operation log settings route', () => {
+    expect(router.getRoutes().some((route) => route.path === '/settings/logs')).toBe(true)
   })
 })
 

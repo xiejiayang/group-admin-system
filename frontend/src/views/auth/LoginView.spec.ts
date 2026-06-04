@@ -35,6 +35,7 @@ const createTestRouter = async (initialPath = '/login') => {
 const generalAdminUser = (): AuthUser => ({
   userId: 1,
   username: 'admin',
+  realName: '管理员',
   phone: '13800000000',
   departmentCode: 'GENERAL_ADMIN',
   departmentName: '综合管理部',

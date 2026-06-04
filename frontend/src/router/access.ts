@@ -8,6 +8,9 @@ const GENERAL_ADMIN_DEPARTMENT = 'GENERAL_ADMIN'
 const PARTY_HR_MENU_PERMISSION = 'menu:party-hr'
 const GENERAL_ADMIN_MENU_PERMISSION = 'menu:general-admin'
 const APPOINTMENT_MANAGE_PERMISSION = 'appointment:manage'
+const SETTINGS_MENU_PERMISSION = 'menu:settings'
+const SETTINGS_ADMIN_ROLES = ['PARTY_HR_ADMIN', 'GENERAL_ADMIN_MANAGER']
+const SETTINGS_PATHS = ['/settings', '/settings/users', '/settings/logs']
 
 const normalizedPath = (path: string) => {
   return path.split(/[?#]/)[0] || '/'
@@ -15,6 +18,19 @@ const normalizedPath = (path: string) => {
 
 const hasAnyPermission = (permissions: string[], acceptedPermissions: string[]) => {
   return acceptedPermissions.some((permission) => permissions.includes(permission))
+}
+
+const hasAnyRole = (roles: string[], acceptedRoles: string[]) => {
+  return acceptedRoles.some((role) => roles.includes(role))
+}
+
+const canAccessSettingsPath = (targetPath: string, roles: string[], permissions: string[]) => {
+  // 设置页承载用户角色和操作日志，必须同时校验管理员角色层级与菜单权限，避免普通用户仅凭菜单码进入。
+  return (
+    SETTINGS_PATHS.includes(targetPath) &&
+    hasAnyRole(roles, SETTINGS_ADMIN_ROLES) &&
+    permissions.includes(SETTINGS_MENU_PERMISSION)
+  )
 }
 
 export const defaultLandingPath = (roles: string[], menus: Pick<SystemMenu, 'path'>[] = []) => {
@@ -48,7 +64,7 @@ export const canAccessPath = (
   }
 
   if (targetPath.startsWith('/settings')) {
-    return false
+    return canAccessSettingsPath(targetPath, roles, permissions)
   }
 
   if (targetPath.startsWith('/party-hr')) {
