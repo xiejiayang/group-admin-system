@@ -28,6 +28,9 @@ public class User {
     @Column(nullable = false, unique = true, length = 64)
     private String username;
 
+    @Column(name = "real_name", nullable = false, length = 64)
+    private String realName = "";
+
     @Column(name = "password_hash", nullable = false)
     private String passwordHash;
 
@@ -64,6 +67,14 @@ public class User {
 
     public void setUsername(String username) {
         this.username = username;
+    }
+
+    public String getRealName() {
+        return realName;
+    }
+
+    public void setRealName(String realName) {
+        this.realName = realName;
     }
 
     public String getPasswordHash() {

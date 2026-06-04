@@ -113,6 +113,36 @@ class MigrationSmokeTest {
     }
 
     @Test
+    void settingsRolesAndOperationLogMigrationCreatesRequiredSchema() {
+        Integer realNameColumnCount = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE LOWER(TABLE_NAME) = 'sys_user'
+                  AND LOWER(COLUMN_NAME) = 'real_name'
+                """, Integer.class);
+        Integer operationLogTableCount = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM INFORMATION_SCHEMA.TABLES
+                WHERE LOWER(TABLE_NAME) = 'sys_operation_log'
+                """, Integer.class);
+        Integer adminRoleCount = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM sys_role
+                WHERE code IN ('PARTY_HR_ADMIN', 'GENERAL_ADMIN_MANAGER')
+                """, Integer.class);
+        Integer operationLogPermissionCount = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM sys_permission
+                WHERE code = 'system:operation-log'
+                """, Integer.class);
+
+        assertThat(realNameColumnCount).isOne();
+        assertThat(operationLogTableCount).isOne();
+        assertThat(adminRoleCount).isEqualTo(2);
+        assertThat(operationLogPermissionCount).isOne();
+    }
+
+    @Test
     void appointmentBoardMigrationBackfillsExistingRecordsAndCreatesIndexes() throws SQLException {
         DriverManagerDataSource dataSource = new DriverManagerDataSource(
                 "jdbc:h2:mem:appointment_board_migration_%d;MODE=MySQL;DATABASE_TO_LOWER=TRUE;"
