@@ -50,16 +50,14 @@ class SystemServiceTest {
     @Test
     void assignRolesLocksSuperAdminsBeforeRejectingLastSuperAdminRemoval() {
         User superadmin = user(1L, "superadmin", role("SUPER_ADMIN"));
-        Role departmentRole = role("DEPARTMENT_USER");
 
         when(userRepository.findByUsernameAndDeletedFalse("superadmin")).thenReturn(Optional.of(superadmin));
         when(userRepository.findByIdAndDeletedFalse(1L)).thenReturn(Optional.of(superadmin));
-        when(roleRepository.findByCodeInAndEnabledTrue(any())).thenReturn(List.of(departmentRole));
         when(userRepository.lockEnabledUsersWithRoleCode("SUPER_ADMIN")).thenReturn(List.of(superadmin));
 
         BusinessException exception = assertThrows(
                 BusinessException.class,
-                () -> systemService.assignRoles("superadmin", 1L, new AssignRolesRequest(List.of("DEPARTMENT_USER"))));
+                () -> systemService.assignRoles("superadmin", 1L, new AssignRolesRequest(List.of("PARTY_HR_USER"))));
 
         assertThat(exception.getMessage()).isEqualTo("至少保留一个超级管理员");
         verify(userRepository).lockEnabledUsersWithRoleCode("SUPER_ADMIN");
@@ -105,15 +103,17 @@ class SystemServiceTest {
         User operator = user(5L, "superadmin", role("SUPER_ADMIN"));
         User target = user(6L, "party_user", department("PARTY_HR", "党群人力部"), role("PARTY_HR_USER"));
         Role partyHrAdmin = role("PARTY_HR_ADMIN");
+        Role departmentRole = role("DEPARTMENT_USER");
 
         when(userRepository.findByUsernameAndDeletedFalse("superadmin")).thenReturn(Optional.of(operator));
         when(userRepository.findByIdAndDeletedFalse(6L)).thenReturn(Optional.of(target));
-        when(roleRepository.findByCodeInAndEnabledTrue(any())).thenReturn(List.of(partyHrAdmin));
+        when(roleRepository.findByCodeInAndEnabledTrue(any())).thenReturn(List.of(partyHrAdmin, departmentRole));
 
         systemService.assignRoles("superadmin", 6L, new AssignRolesRequest(List.of("PARTY_HR_ADMIN")));
 
-        verify(operationLogService).recordRoleAssigned(operator, target, List.of(partyHrAdmin));
-        assertThat(target.getRoles()).extracting(Role::getCode).containsExactly("PARTY_HR_ADMIN");
+        verify(operationLogService).recordRoleAssigned(operator, target, List.of(partyHrAdmin, departmentRole));
+        assertThat(target.getRoles()).extracting(Role::getCode)
+                .containsExactlyInAnyOrder("DEPARTMENT_USER", "PARTY_HR_ADMIN");
     }
 
     @Test

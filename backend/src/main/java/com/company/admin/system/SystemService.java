@@ -107,18 +107,6 @@ public class SystemService {
                 .map(String::trim)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
 
-        List<Role> roles = requestedCodes.isEmpty()
-                ? List.of()
-                : roleRepository.findByCodeInAndEnabledTrue(requestedCodes);
-        Map<String, Role> rolesByCode = roles.stream()
-                .collect(Collectors.toMap(Role::getCode, Function.identity()));
-        List<String> missingCodes = requestedCodes.stream()
-                .filter(code -> !rolesByCode.containsKey(code))
-                .toList();
-        if (!missingCodes.isEmpty()) {
-            throw new BusinessException("角色不存在或已停用: " + String.join(",", missingCodes));
-        }
-
         boolean removingSuperAdmin = isEnabled(user)
                 && hasRole(user, DepartmentAccessPolicy.SUPER_ADMIN_ROLE)
                 && !requestedCodes.contains(DepartmentAccessPolicy.SUPER_ADMIN_ROLE);
@@ -134,10 +122,22 @@ public class SystemService {
         if (isSuperAdminTarget(user) && !Set.of(DepartmentAccessPolicy.SUPER_ADMIN_ROLE).equals(requestedCodes)) {
             throw new BusinessException("超级管理员账号只允许分配超级管理员角色");
         }
-        departmentAccessPolicy.validateRoleAssignment(user, requestedCodes);
+        validateRequestedRoleCodes(user, requestedCodes);
+
+        Set<String> finalRoleCodes = finalRoleCodes(user, requestedCodes);
+        List<Role> roles = roleRepository.findByCodeInAndEnabledTrue(finalRoleCodes);
+        Map<String, Role> rolesByCode = roles.stream()
+                .collect(Collectors.toMap(Role::getCode, Function.identity()));
+        List<String> missingCodes = finalRoleCodes.stream()
+                .filter(code -> !rolesByCode.containsKey(code))
+                .toList();
+        if (!missingCodes.isEmpty()) {
+            throw new BusinessException("角色不存在或已停用: " + String.join(",", missingCodes));
+        }
+        departmentAccessPolicy.validateRoleAssignment(user, finalRoleCodes);
 
         user.getRoles().clear();
-        requestedCodes.stream()
+        finalRoleCodes.stream()
                 .map(rolesByCode::get)
                 .forEach(user.getRoles()::add);
         operationLogService.recordRoleAssigned(operator, user, roles);
@@ -175,6 +175,28 @@ public class SystemService {
             visiblePermissionCodes.add(SETTINGS_MENU_PERMISSION);
         }
         return visiblePermissionCodes;
+    }
+
+    private void validateRequestedRoleCodes(User target, Set<String> requestedCodes) {
+        // 前端只提交弹窗可见角色；隐藏的 DEPARTMENT_USER 由后端补齐，不允许客户端直接提交。
+        Set<String> allowedRoleCodes = isSuperAdminTarget(target)
+                ? Set.of(DepartmentAccessPolicy.SUPER_ADMIN_ROLE)
+                : departmentAccessPolicy.visibleAssignableRoleCodes(target);
+        List<String> invalidCodes = requestedCodes.stream()
+                .filter(code -> !allowedRoleCodes.contains(code))
+                .toList();
+        if (!invalidCodes.isEmpty()) {
+            throw new BusinessException("用户所属部门不允许分配角色: " + String.join(",", invalidCodes));
+        }
+    }
+
+    private Set<String> finalRoleCodes(User target, Set<String> requestedCodes) {
+        Set<String> finalRoleCodes = new LinkedHashSet<>(requestedCodes);
+        // 部门账号必须始终保留基础部门角色，避免设置弹窗隐藏该角色后保存时误清空基础身份。
+        if (!isSuperAdminTarget(target) && departmentCode(target) != null) {
+            finalRoleCodes.add(DepartmentAccessPolicy.DEFAULT_DEPARTMENT_ROLE);
+        }
+        return finalRoleCodes;
     }
 
     private void ensureCanManageTarget(User operator, User target) {

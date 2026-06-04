@@ -1,5 +1,6 @@
 package com.company.admin.system;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.not;
@@ -258,13 +259,47 @@ class SystemControllerTest {
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(
-                                "roleCodes", java.util.List.of("DEPARTMENT_USER", "PARTY_HR_USER")))))
+                                "roleCodes", java.util.List.of("PARTY_HR_USER")))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.id").value(user.id()))
                 .andExpect(jsonPath("$.data.roles", hasItem("DEPARTMENT_USER")))
                 .andExpect(jsonPath("$.data.roles", hasItem("PARTY_HR_USER")))
                 .andExpect(jsonPath("$.data.roles", not(hasItem("GENERAL_ADMIN_USER"))));
+    }
+
+    @Test
+    void assignRolesRejectsEmptyRoleCodesWithoutClearingExistingRoles() throws Exception {
+        String token = loginSuperadmin().token();
+        AuthPayload user = registerUser("task4_empty_roles", "PARTY_HR");
+
+        mockMvc.perform(put("/api/system/users/{userId}/roles", user.id())
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "roleCodes", java.util.List.of()))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false));
+
+        assertThat(assignedRoleCodes(user.id()))
+                .contains("DEPARTMENT_USER", "PARTY_HR_USER");
+    }
+
+    @Test
+    void departmentAdminAssignsVisibleRoleAndPreservesDepartmentBaseRole() throws Exception {
+        AuthPayload admin = registerUser("task4_party_admin_base", "PARTY_HR");
+        AuthPayload target = registerUser("task4_party_base_target", "PARTY_HR");
+        grantRoles(admin.id(), "PARTY_HR_ADMIN");
+
+        mockMvc.perform(put("/api/system/users/{userId}/roles", target.id())
+                        .header("Authorization", "Bearer " + admin.token())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "roleCodes", java.util.List.of("PARTY_HR_ADMIN")))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.roles", hasItem("DEPARTMENT_USER")))
+                .andExpect(jsonPath("$.data.roles", hasItem("PARTY_HR_ADMIN")));
     }
 
     @Test
@@ -296,7 +331,7 @@ class SystemControllerTest {
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(
-                                "roleCodes", java.util.List.of("DEPARTMENT_USER", "GENERAL_ADMIN_USER")))))
+                                "roleCodes", java.util.List.of("GENERAL_ADMIN_USER")))))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.success").value(false));
     }
@@ -311,7 +346,6 @@ class SystemControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(
                                 "roleCodes", java.util.List.of(
-                                        "DEPARTMENT_USER",
                                         "PARTY_HR_USER",
                                         "GENERAL_ADMIN_USER")))))
                 .andExpect(status().isBadRequest())
@@ -347,7 +381,7 @@ class SystemControllerTest {
                         .header("Authorization", "Bearer " + user.token())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(
-                                "roleCodes", java.util.List.of("DEPARTMENT_USER", "PARTY_HR_USER")))))
+                                "roleCodes", java.util.List.of("PARTY_HR_USER")))))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.success").value(false));
     }
@@ -361,7 +395,7 @@ class SystemControllerTest {
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(
-                                "roleCodes", java.util.List.of("DEPARTMENT_USER", "UNKNOWN_ROLE")))))
+                                "roleCodes", java.util.List.of("UNKNOWN_ROLE")))))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.success").value(false));
     }
@@ -374,7 +408,7 @@ class SystemControllerTest {
                         .header("Authorization", "Bearer " + superadmin.token())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(
-                                "roleCodes", java.util.List.of("DEPARTMENT_USER")))))
+                                "roleCodes", java.util.List.of("PARTY_HR_USER")))))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.success").value(false));
     }
@@ -430,6 +464,19 @@ class SystemControllerTest {
                     userId,
                     roleCode);
         }
+    }
+
+    private java.util.List<String> assignedRoleCodes(Long userId) {
+        return jdbcTemplate.queryForList(
+                """
+                SELECT r.code
+                FROM sys_user_role ur
+                JOIN sys_role r ON r.id = ur.role_id
+                WHERE ur.user_id = ?
+                ORDER BY r.code
+                """,
+                String.class,
+                userId);
     }
 
     private AuthPayload payload(String response) throws Exception {
