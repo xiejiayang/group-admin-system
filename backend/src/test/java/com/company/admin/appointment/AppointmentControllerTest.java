@@ -313,6 +313,23 @@ class AppointmentControllerTest {
     }
 
     @Test
+    void createAndUpdateAppointmentWriteOperationLogs() throws Exception {
+        String token = loginSuperadmin().token();
+
+        Long appointmentId = createAppointment(token, createRequest("operation-log-create-user", "reason", List.of()));
+        assertOperationLogContains(token, "新增任免审批表");
+
+        mockMvc.perform(put("/api/party-hr/appointments/{id}", appointmentId)
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                createRequest("operation-log-update-user", "updated reason", List.of()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
+        assertOperationLogContains(token, "编辑任免审批表");
+    }
+
+    @Test
     void generalAdminCannotAccessAppointmentApis() throws Exception {
         AuthPayload generalAdmin = registerUser("task5_general", "GENERAL_ADMIN");
 
@@ -639,6 +656,14 @@ class AppointmentControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.id").value(appointmentId))
                 .andExpect(jsonPath("$.data.age").value(nullValue()));
+    }
+
+    private void assertOperationLogContains(String token, String operationRecord) throws Exception {
+        mockMvc.perform(get("/api/system/logs")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data[*].operationRecord", hasItem(containsString(operationRecord))));
     }
 
     private void assertInvalidPhotoFileIdRejected(String token, Long photoFileId) throws Exception {

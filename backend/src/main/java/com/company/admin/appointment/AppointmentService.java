@@ -11,6 +11,7 @@ import com.company.admin.file.FileBusinessTypes;
 import com.company.admin.file.SysFileRepository;
 import com.company.admin.system.Department;
 import com.company.admin.system.DepartmentAccessPolicy;
+import com.company.admin.system.OperationLogService;
 import com.company.admin.system.Permission;
 import com.company.admin.system.Role;
 import com.company.admin.system.User;
@@ -55,16 +56,19 @@ public class AppointmentService {
     private final AppointmentRecordRepository appointmentRecordRepository;
     private final UserRepository userRepository;
     private final SysFileRepository sysFileRepository;
+    private final OperationLogService operationLogService;
     private final Clock clock;
 
     public AppointmentService(
             AppointmentRecordRepository appointmentRecordRepository,
             UserRepository userRepository,
             SysFileRepository sysFileRepository,
+            OperationLogService operationLogService,
             Clock clock) {
         this.appointmentRecordRepository = appointmentRecordRepository;
         this.userRepository = userRepository;
         this.sysFileRepository = sysFileRepository;
+        this.operationLogService = operationLogService;
         this.clock = clock;
     }
 
@@ -101,6 +105,8 @@ public class AppointmentService {
         replaceFamilyMembers(record, request.familyMembers());
         AppointmentRecord savedRecord = appointmentRecordRepository.save(record);
         normalizeGlobalSequences();
+        // 任免审批表序号归一化完成后再写日志，确保只为已成功保存的新增操作留痕。
+        operationLogService.recordAppointmentCreated(operator, savedRecord.getName());
         return toDetailResponse(savedRecord);
     }
 
@@ -112,6 +118,8 @@ public class AppointmentService {
         record.setUpdatedBy(operator.getId());
         replaceFamilyMembers(record, request.familyMembers());
         normalizeGlobalSequences();
+        // 编辑字段和序号归一化都完成后再写日志，日志姓名使用最终落库的任免对象姓名。
+        operationLogService.recordAppointmentUpdated(operator, record.getName());
         return toDetailResponse(record);
     }
 
