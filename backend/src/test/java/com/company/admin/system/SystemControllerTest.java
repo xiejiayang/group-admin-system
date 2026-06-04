@@ -138,6 +138,61 @@ class SystemControllerTest {
     }
 
     @Test
+    void generalAdminManagerOnlyReadsGeneralAdminUsers() throws Exception {
+        AuthPayload manager = registerUser("task4_general_manager_users", "GENERAL_ADMIN");
+        AuthPayload generalUser = registerUser("task4_general_visible", "GENERAL_ADMIN");
+        AuthPayload partyUser = registerUser("task4_party_hidden", "PARTY_HR");
+        grantRoles(manager.id(), "GENERAL_ADMIN_MANAGER");
+
+        mockMvc.perform(get("/api/system/users")
+                        .header("Authorization", "Bearer " + manager.token()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data[*].username", hasItem(manager.username())))
+                .andExpect(jsonPath("$.data[*].username", hasItem(generalUser.username())))
+                .andExpect(jsonPath("$.data[*].username", not(hasItem(partyUser.username()))));
+    }
+
+    @Test
+    void generalAdminManagerRolesForDepartmentUserOnlyReturnManagerAndUser() throws Exception {
+        AuthPayload manager = registerUser("task4_general_manager_roles", "GENERAL_ADMIN");
+        AuthPayload target = registerUser("task4_general_role_target", "GENERAL_ADMIN");
+        grantRoles(manager.id(), "GENERAL_ADMIN_MANAGER");
+
+        mockMvc.perform(get("/api/system/roles")
+                        .param("targetUserId", String.valueOf(target.id()))
+                        .header("Authorization", "Bearer " + manager.token()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data", hasSize(2)))
+                .andExpect(jsonPath("$.data[*].code", hasItem("GENERAL_ADMIN_MANAGER")))
+                .andExpect(jsonPath("$.data[*].code", hasItem("GENERAL_ADMIN_USER")))
+                .andExpect(jsonPath("$.data[*].code", not(hasItem("SUPER_ADMIN"))))
+                .andExpect(jsonPath("$.data[*].code", not(hasItem("PARTY_HR_ADMIN"))))
+                .andExpect(jsonPath("$.data[*].code", not(hasItem("PARTY_HR_USER"))))
+                .andExpect(jsonPath("$.data[*].code", not(hasItem("DEPARTMENT_USER"))));
+    }
+
+    @Test
+    void generalAdminManagerOnlyReadsGeneralAdminOperationLogs() throws Exception {
+        AuthPayload manager = registerUser("task4_general_manager_logs", "GENERAL_ADMIN");
+        AuthPayload generalUser = registerUser("task4_general_log_visible", "GENERAL_ADMIN");
+        AuthPayload partyUser = registerUser("task4_party_log_hidden", "PARTY_HR");
+        grantRoles(manager.id(), "GENERAL_ADMIN_MANAGER");
+        loginUser(generalUser.username(), "StrongPass123");
+        loginUser(partyUser.username(), "StrongPass123");
+
+        mockMvc.perform(get("/api/system/logs")
+                        .header("Authorization", "Bearer " + manager.token()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data[*].operatorUsername", hasItem(generalUser.username())))
+                .andExpect(jsonPath("$.data[*].operatorUsername", not(hasItem(partyUser.username()))))
+                .andExpect(jsonPath("$.data[*].department", hasItem("综合管理部")))
+                .andExpect(jsonPath("$.data[*].department", not(hasItem("党群人力部"))));
+    }
+
+    @Test
     void departmentAdminCannotAssignRolesToCrossDepartmentUser() throws Exception {
         AuthPayload admin = registerUser("task4_party_admin_cross", "PARTY_HR");
         AuthPayload target = registerUser("task4_general_cross_target", "GENERAL_ADMIN");
@@ -172,6 +227,7 @@ class SystemControllerTest {
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data[*].id", hasItem(notNullValue())))
                 .andExpect(jsonPath("$.data[*].username", hasItem("superadmin")))
+                .andExpect(jsonPath("$.data[*].realName", hasItem("superadmin")))
                 .andExpect(jsonPath("$.data[*].phone", hasItem("00000000000")))
                 .andExpect(jsonPath("$.data[*].roles", hasItem(hasItem("SUPER_ADMIN"))))
                 .andExpect(jsonPath("$.data[*].status", hasItem("ENABLED")));
@@ -324,11 +380,15 @@ class SystemControllerTest {
     }
 
     private AuthPayload loginSuperadmin() throws Exception {
+        return loginUser("superadmin", "xjyadmin");
+    }
+
+    private AuthPayload loginUser(String username, String password) throws Exception {
         String response = mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(
-                                "username", "superadmin",
-                                "password", "xjyadmin"))))
+                                "username", username,
+                                "password", password))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.token", notNullValue()))
                 .andReturn()

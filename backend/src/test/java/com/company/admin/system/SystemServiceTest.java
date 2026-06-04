@@ -3,6 +3,8 @@ package com.company.admin.system;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -112,6 +114,30 @@ class SystemServiceTest {
 
         verify(operationLogService).recordRoleAssigned(operator, target, List.of(partyHrAdmin));
         assertThat(target.getRoles()).extracting(Role::getCode).containsExactly("PARTY_HR_ADMIN");
+    }
+
+    @Test
+    void partyHrAdminOperationLogsDelegateToOwnDepartment() {
+        User operator = user(7L, "party_admin", department("PARTY_HR", "党群人力部"), role("PARTY_HR_ADMIN"));
+
+        when(userRepository.findByUsernameAndDeletedFalse("party_admin")).thenReturn(Optional.of(operator));
+
+        systemService.operationLogs("party_admin");
+
+        verify(operationLogService).listByDepartment("党群人力部");
+        verify(operationLogService, never()).listAll();
+    }
+
+    @Test
+    void superAdminOperationLogsDelegateToAllLogs() {
+        User operator = user(8L, "superadmin", role("SUPER_ADMIN"));
+
+        when(userRepository.findByUsernameAndDeletedFalse("superadmin")).thenReturn(Optional.of(operator));
+
+        systemService.operationLogs("superadmin");
+
+        verify(operationLogService).listAll();
+        verify(operationLogService, never()).listByDepartment(anyString());
     }
 
     private User user(Long id, String username, Role... roles) {
