@@ -25,15 +25,27 @@ const emit = defineEmits<{
 }>()
 
 const form = ref<AppointmentFormPayload>(createEmptyAppointmentForm())
+const createDraft = ref<AppointmentFormPayload>(createEmptyAppointmentForm())
 const loading = ref(false)
 const saving = ref(false)
 const loadError = ref('')
+
+const persistCreateDraft = () => {
+  if (props.mode === 'create') {
+    // 新增草稿独立保存，避免查看或编辑已有记录时覆盖用户尚未提交的内容。
+    createDraft.value = normalizeAppointmentForm(form.value)
+  }
+}
 
 const visible = computed({
   get: () => props.modelValue,
   set: (value: boolean) => {
     if (!value && saving.value) {
       return
+    }
+
+    if (!value) {
+      persistCreateDraft()
     }
 
     emit('update:modelValue', value)
@@ -83,7 +95,7 @@ watch(
     loadError.value = ''
 
     if (props.mode === 'create') {
-      form.value = createEmptyAppointmentForm()
+      form.value = normalizeAppointmentForm(createDraft.value)
       return
     }
 
@@ -95,6 +107,7 @@ watch(
 
 const handleBeforeClose = (done: () => void) => {
   if (!saving.value) {
+    persistCreateDraft()
     done()
   }
 }
@@ -133,12 +146,16 @@ const handleSave = async () => {
   try {
     if (props.mode === 'create') {
       await createAppointment(payload)
+      // 只有新增保存成功后才清空草稿，接口失败时继续保留当前填写内容。
+      createDraft.value = createEmptyAppointmentForm()
+      form.value = normalizeAppointmentForm(createDraft.value)
     } else if (props.appointmentId) {
       await updateAppointment(props.appointmentId, payload)
     }
 
     ElMessage.success('任免审批表已保存')
     emit('refresh')
+    saving.value = false
     visible.value = false
   } catch (error) {
     ElMessage.error(toMessage(error, '任免审批表保存失败'))
