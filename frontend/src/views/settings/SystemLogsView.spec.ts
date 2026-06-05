@@ -1,6 +1,8 @@
 import { flushPromises, mount } from '@vue/test-utils'
-import ElementPlus from 'element-plus'
+import ElementPlus, { ElTableColumn } from 'element-plus'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+import type { OperationLog } from '@/api/system'
 
 import SystemLogsView from './SystemLogsView.vue'
 
@@ -15,18 +17,20 @@ describe('SystemLogsView', () => {
     fetchOperationLogsMock.mockReset()
   })
 
-  const operationLog = () => ({
-    id: 1,
-    operatorUsername: 'admin',
-    realName: '管理员',
-    department: null,
-    phone: '13800000000',
-    role: 'SUPER_ADMIN',
-    operationRecord: '分配用户角色'
-  })
+  const operationLogs = (): OperationLog[] => [
+    {
+      id: 1,
+      operatorUsername: 'admin',
+      realName: '管理员',
+      department: null,
+      phone: '13800000000',
+      role: 'SUPER_ADMIN',
+      operationRecord: '分配用户角色'
+    }
+  ]
 
   it('renders the operation log title and table headers', async () => {
-    fetchOperationLogsMock.mockResolvedValue([operationLog()])
+    fetchOperationLogsMock.mockResolvedValue(operationLogs())
 
     const wrapper = mount(SystemLogsView, {
       global: {
@@ -37,6 +41,7 @@ describe('SystemLogsView', () => {
     await flushPromises()
 
     const text = wrapper.text()
+    const columnLabels = wrapper.findAllComponents(ElTableColumn).map((column) => column.props('label'))
 
     expect(text).toContain('操作记录')
     expect(text).toContain('操作账号')
@@ -44,10 +49,11 @@ describe('SystemLogsView', () => {
     expect(text).toContain('部门')
     expect(text).toContain('手机号')
     expect(text).toContain('角色')
+    expect(columnLabels).toContain('操作记录')
   })
 
   it('loads and renders operation log rows', async () => {
-    fetchOperationLogsMock.mockResolvedValue([operationLog()])
+    fetchOperationLogsMock.mockResolvedValue(operationLogs())
 
     const wrapper = mount(SystemLogsView, {
       global: {

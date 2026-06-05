@@ -1,5 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils'
-import ElementPlus from 'element-plus'
+import ElementPlus, { ElMessage } from 'element-plus'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createMemoryHistory, createRouter } from 'vue-router'
 
@@ -55,7 +55,8 @@ describe('RegisterView', () => {
     const wrapper = mount(RegisterView, {
       global: {
         plugins: [ElementPlus, router]
-      }
+      },
+      attachTo: document.body
     })
 
     expect(wrapper.find('input[placeholder="请输入姓名"]').exists()).toBe(true)
@@ -68,7 +69,8 @@ describe('RegisterView', () => {
     const wrapper = mount(RegisterView, {
       global: {
         plugins: [ElementPlus, router]
-      }
+      },
+      attachTo: document.body
     })
 
     await wrapper.find('input[autocomplete="username"]').setValue(' new-user ')
@@ -85,5 +87,29 @@ describe('RegisterView', () => {
       phone: '13800000000',
       departmentCode: 'PARTY_HR'
     })
+  })
+
+  it('rejects a blank real name with only spaces', async () => {
+    const router = await createTestRouter()
+    const warningSpy = vi.spyOn(ElMessage, 'warning').mockImplementation(() => undefined as never)
+    registerMock.mockResolvedValue(registeredUser())
+
+    const wrapper = mount(RegisterView, {
+      global: {
+        plugins: [ElementPlus, router]
+      },
+      attachTo: document.body
+    })
+
+    await wrapper.find('input[autocomplete="username"]').setValue('new-user')
+    await wrapper.find('input[autocomplete="name"]').setValue('   ')
+    await wrapper.find('input[autocomplete="new-password"]').setValue('secret')
+    await wrapper.find('input[autocomplete="tel"]').setValue('13800000000')
+    await wrapper.find('button.auth-submit').trigger('click')
+    await flushPromises()
+
+    expect(registerMock).not.toHaveBeenCalled()
+    expect(warningSpy).toHaveBeenCalledWith('请输入姓名')
+    warningSpy.mockRestore()
   })
 })

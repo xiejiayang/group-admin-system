@@ -23,7 +23,7 @@ export interface OperationLog {
   id: number
   operatorUsername: string
   realName: string
-  department: string
+  department: string | null
   phone: string
   role: string
   operationRecord: string

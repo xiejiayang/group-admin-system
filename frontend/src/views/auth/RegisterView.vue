@@ -22,6 +22,7 @@ import { useAuthStore } from '@/stores/auth'
 const router = useRouter()
 const formRef = ref<FormInstance>()
 const loading = ref(false)
+const realNameError = ref('')
 const form = reactive<RegisterRequest>({
   username: '',
   realName: '',
@@ -30,9 +31,21 @@ const form = reactive<RegisterRequest>({
   departmentCode: 'PARTY_HR'
 })
 
+const validateRealName = (_rule: unknown, value: string, callback: (error?: string | Error) => void) => {
+  // 姓名会写入审计和用户展示，纯空格必须按未填写处理。
+  if (value.trim().length > 0) {
+    realNameError.value = ''
+    callback()
+    return
+  }
+
+  realNameError.value = '请输入姓名'
+  callback(new Error('请输入姓名'))
+}
+
 const rules: FormRules<typeof form> = {
   username: [{ required: true, message: '请输入账号', trigger: 'blur' }],
-  realName: [{ required: true, message: '请输入姓名', trigger: 'blur' }],
+  realName: [{ required: true, validator: validateRealName, message: '请输入姓名', trigger: 'blur' }],
   password: [{ required: true, message: '请输入密码', trigger: 'blur' }],
   phone: [
     { required: true, message: '请输入手机号', trigger: 'blur' },
@@ -54,9 +67,15 @@ const landingPath = (user: AuthUser) => {
 }
 
 const handleRegister = async () => {
+  form.realName = form.realName.trim()
+  realNameError.value = form.realName.length === 0 ? '请输入姓名' : ''
   const valid = await formRef.value?.validate().catch(() => false)
 
-  if (!valid) {
+  if (!valid || realNameError.value) {
+    if (realNameError.value) {
+      ElMessage.warning(realNameError.value)
+    }
+
     return
   }
 
@@ -67,7 +86,7 @@ const handleRegister = async () => {
     // 注册资料提交前统一去除首尾空格，避免姓名和账号落库后出现不可见差异。
     const user = await authStore.register({
       username: form.username.trim(),
-      realName: form.realName.trim(),
+      realName: form.realName,
       password: form.password,
       phone: form.phone.trim(),
       departmentCode: form.departmentCode
