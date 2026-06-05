@@ -29,6 +29,7 @@ const createDraft = ref<AppointmentFormPayload>(createEmptyAppointmentForm())
 const loading = ref(false)
 const saving = ref(false)
 const loadError = ref('')
+let detailRequestSequence = 0
 
 const persistCreateDraft = () => {
   if (props.mode === 'create') {
@@ -70,18 +71,45 @@ const toMessage = (error: unknown, fallback: string) => {
   return error instanceof Error ? error.message : fallback
 }
 
+const invalidateDetailRequest = () => {
+  detailRequestSequence += 1
+  loading.value = false
+  loadError.value = ''
+}
+
 const loadDetail = async (id: number) => {
+  const requestSequence = ++detailRequestSequence
   loading.value = true
   loadError.value = ''
 
+  const isCurrentRequest = () => {
+    // 详情响应只能更新发起它的可见查看/编辑会话，避免旧请求覆盖新增草稿。
+    return (
+      requestSequence === detailRequestSequence &&
+      props.modelValue &&
+      props.mode !== 'create' &&
+      props.appointmentId === id
+    )
+  }
+
   try {
-    form.value = normalizeAppointmentForm(await fetchAppointmentDetail(id))
+    const detail = await fetchAppointmentDetail(id)
+
+    if (isCurrentRequest()) {
+      form.value = normalizeAppointmentForm(detail)
+    }
   } catch (error) {
+    if (!isCurrentRequest()) {
+      return
+    }
+
     const message = toMessage(error, '任免审批表加载失败')
     loadError.value = message
     ElMessage.error(message)
   } finally {
-    loading.value = false
+    if (isCurrentRequest()) {
+      loading.value = false
+    }
   }
 }
 
@@ -89,18 +117,20 @@ watch(
   () => props.modelValue,
   (opened) => {
     if (!opened) {
+      invalidateDetailRequest()
       return
     }
 
-    loadError.value = ''
-
     if (props.mode === 'create') {
+      invalidateDetailRequest()
       form.value = normalizeAppointmentForm(createDraft.value)
       return
     }
 
     if (props.appointmentId) {
       void loadDetail(props.appointmentId)
+    } else {
+      invalidateDetailRequest()
     }
   }
 )

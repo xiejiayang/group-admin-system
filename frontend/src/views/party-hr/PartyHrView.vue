@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Plus, Refresh } from '@element-plus/icons-vue'
-import { ElButton, ElCard, ElMessage, ElMessageBox, ElPagination } from 'element-plus'
+import { ElButton, ElCard, ElConfigProvider, ElMessage, ElMessageBox, ElPagination } from 'element-plus'
+import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import { onMounted, ref } from 'vue'
 
 import { deleteAppointment, fetchAppointments } from '@/api/appointment'
@@ -16,6 +17,18 @@ const loading = ref(false)
 const dialogVisible = ref(false)
 const dialogMode = ref<AppointmentFormMode>('view')
 const selectedAppointmentId = ref<number | null>(null)
+
+const paginationLocale = {
+  ...zhCn,
+  el: {
+    ...zhCn.el,
+    pagination: {
+      ...zhCn.el.pagination,
+      total: '总计 {total} 条',
+      pagesize: '条/页'
+    }
+  }
+}
 
 const toMessage = (error: unknown, fallback: string) => {
   return error instanceof Error ? error.message : fallback
@@ -121,16 +134,18 @@ const handleDelete = async (appointment: AppointmentSummary) => {
       />
 
       <div v-if="total > 0" class="appointment-pagination">
-        <el-pagination
-          background
-          :current-page="page + 1"
-          layout="total, sizes, prev, pager, next"
-          :page-size="size"
-          :page-sizes="[10, 20, 50]"
-          :total="total"
-          @current-change="handleCurrentChange"
-          @size-change="handleSizeChange"
-        />
+        <el-config-provider :locale="paginationLocale">
+          <el-pagination
+            background
+            :current-page="page + 1"
+            layout="total, sizes, prev, pager, next"
+            :page-size="size"
+            :page-sizes="[10, 20, 50]"
+            :total="total"
+            @current-change="handleCurrentChange"
+            @size-change="handleSizeChange"
+          />
+        </el-config-provider>
       </div>
     </el-card>
 

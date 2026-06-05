@@ -2,7 +2,11 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { defineComponent, h, nextTick } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { createEmptyAppointmentForm, type AppointmentFormPayload } from '@/types/appointment'
+import {
+  createEmptyAppointmentForm,
+  type AppointmentDetail,
+  type AppointmentFormPayload
+} from '@/types/appointment'
 
 import AppointmentFormDialog from './AppointmentFormDialog.vue'
 
@@ -206,5 +210,37 @@ describe('AppointmentFormDialog', () => {
     await wrapper.setProps({ modelValue: true })
 
     expect(formGrid(wrapper).props('modelValue')).toMatchObject({ name: '新增草稿' })
+  })
+
+  it('ignores a stale detail response after returning to the create draft', async () => {
+    let resolveDetail!: (detail: AppointmentDetail) => void
+    fetchAppointmentDetailMock.mockReturnValueOnce(
+      new Promise<AppointmentDetail>((resolve) => {
+        resolveDetail = resolve
+      })
+    )
+    const wrapper = mountDialog()
+    await wrapper.setProps({ modelValue: true })
+    await fillForm(wrapper, requiredDraft('竞态新增草稿'))
+    await clickFooterButton(wrapper, '取消')
+
+    await wrapper.setProps({ modelValue: false, mode: 'view', appointmentId: 8 })
+    await wrapper.setProps({ modelValue: true })
+    expect(fetchAppointmentDetailMock).toHaveBeenCalledWith(8)
+
+    await clickFooterButton(wrapper, '关闭')
+    await wrapper.setProps({ modelValue: false, mode: 'create', appointmentId: null })
+    await wrapper.setProps({ modelValue: true })
+
+    resolveDetail({
+      ...requiredDraft('延迟返回的已有记录'),
+      id: 8,
+      globalSequence: 1,
+      displaySequence: 1,
+      age: 36
+    })
+    await flushPromises()
+
+    expect(formGrid(wrapper).props('modelValue')).toMatchObject({ name: '竞态新增草稿' })
   })
 })
