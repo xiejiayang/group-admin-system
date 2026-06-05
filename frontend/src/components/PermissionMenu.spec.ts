@@ -19,7 +19,7 @@ vi.mock('vue-router', () => ({
 const menus = (): SystemMenu[] => [
   {
     id: 1,
-    name: '综合管理',
+    name: '综合管理部',
     path: '/general-admin',
     permissionCode: 'general-admin:view',
     sortOrder: 1
@@ -54,6 +54,14 @@ describe('PermissionMenu', () => {
     expect(text).toContain('设置')
     expect(text).toContain('角色分配')
     expect(text).toContain('系统日志')
+
+    const regularMenuItem = wrapper
+      .findAllComponents({ name: 'ElMenuItem' })
+      .find((item) => item.props('index') === '/general-admin')
+
+    expect(text).toContain('综合管理部')
+    expect(regularMenuItem?.props('index')).toBe('/general-admin')
+    expect(regularMenuItem?.text()).toContain('综合管理部')
   })
 
   it('pushes the system logs path when the logs child menu is selected', async () => {
