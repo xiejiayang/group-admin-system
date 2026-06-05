@@ -170,10 +170,7 @@ class MigrationSmokeTest {
         Long managerRoleId = isolatedJdbcTemplate.queryForObject(
                 "SELECT id FROM sys_role WHERE code = 'GENERAL_ADMIN_MANAGER'",
                 Long.class);
-        Integer managerPermissionCount = isolatedJdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM sys_role_permission WHERE role_id = ?",
-                Integer.class,
-                managerRoleId);
+        List<String> managerPermissionCodes = permissionCodes(isolatedJdbcTemplate, managerRoleId);
         isolatedJdbcTemplate.update("""
                 INSERT INTO sys_user_role(user_id, role_id)
                 SELECT u.id, r.id
@@ -201,11 +198,8 @@ class MigrationSmokeTest {
                         "SELECT id FROM sys_role WHERE code = 'GENERAL_ADMIN_ADMIN'",
                         Long.class))
                 .isEqualTo(managerRoleId);
-        assertThat(isolatedJdbcTemplate.queryForObject(
-                        "SELECT COUNT(*) FROM sys_role_permission WHERE role_id = ?",
-                        Integer.class,
-                        managerRoleId))
-                .isEqualTo(managerPermissionCount);
+        assertThat(permissionCodes(isolatedJdbcTemplate, managerRoleId))
+                .containsExactlyElementsOf(managerPermissionCodes);
         assertThat(isolatedJdbcTemplate.queryForObject("""
                         SELECT COUNT(*)
                         FROM sys_user_role ur
@@ -218,6 +212,97 @@ class MigrationSmokeTest {
                         "SELECT COUNT(*) FROM sys_role WHERE code IN ('GENERAL_ADMIN_MANAGER', 'DEPARTMENT_USER')",
                         Integer.class))
                 .isZero();
+    }
+
+    @Test
+    void departmentRoleCleanupMigrationMergesDriftedManagerRolesIntoOldRoleId() {
+        DriverManagerDataSource dataSource = roleCleanupMigrationDataSource();
+
+        Flyway.configure()
+                .dataSource(dataSource)
+                .locations("classpath:db/migration")
+                .target("4")
+                .load()
+                .migrate();
+
+        JdbcTemplate isolatedJdbcTemplate = new JdbcTemplate(dataSource);
+        Long oldRoleId = isolatedJdbcTemplate.queryForObject(
+                "SELECT id FROM sys_role WHERE code = 'GENERAL_ADMIN_MANAGER'",
+                Long.class);
+        isolatedJdbcTemplate.update("""
+                INSERT INTO sys_role(code, name)
+                VALUES ('GENERAL_ADMIN_ADMIN', '综合管理部管理员-漂移')
+                """);
+        Long driftedNewRoleId = isolatedJdbcTemplate.queryForObject(
+                "SELECT id FROM sys_role WHERE code = 'GENERAL_ADMIN_ADMIN'",
+                Long.class);
+        isolatedJdbcTemplate.update("""
+                INSERT INTO sys_user(username, real_name, password_hash, phone, status)
+                VALUES ('drift_new_only', '漂移用户', 'encoded', '13900000001', 'ENABLED')
+                """);
+        isolatedJdbcTemplate.update("""
+                INSERT INTO sys_user_role(user_id, role_id)
+                SELECT u.id, r.id
+                FROM sys_user u
+                JOIN sys_role r ON r.code = 'GENERAL_ADMIN_ADMIN'
+                WHERE u.username IN ('superadmin', 'drift_new_only')
+                """);
+        isolatedJdbcTemplate.update("""
+                INSERT INTO sys_user_role(user_id, role_id)
+                SELECT u.id, r.id
+                FROM sys_user u
+                JOIN sys_role r ON r.code = 'GENERAL_ADMIN_MANAGER'
+                WHERE u.username = 'superadmin'
+                """);
+        isolatedJdbcTemplate.update("""
+                INSERT INTO sys_role_permission(role_id, permission_id)
+                SELECT r.id, p.id
+                FROM sys_role r
+                JOIN sys_permission p ON p.code IN ('menu:settings', 'menu:party-hr')
+                WHERE r.code = 'GENERAL_ADMIN_ADMIN'
+                """);
+
+        List<String> expectedPermissionCodes = isolatedJdbcTemplate.queryForList("""
+                SELECT DISTINCT p.code
+                FROM sys_role_permission rp
+                JOIN sys_permission p ON p.id = rp.permission_id
+                WHERE rp.role_id IN (?, ?)
+                ORDER BY p.code
+                """, String.class, oldRoleId, driftedNewRoleId);
+
+        Flyway.configure()
+                .dataSource(dataSource)
+                .locations("classpath:db/migration")
+                .load()
+                .migrate();
+
+        assertThat(isolatedJdbcTemplate.queryForObject(
+                        "SELECT id FROM sys_role WHERE code = 'GENERAL_ADMIN_ADMIN'",
+                        Long.class))
+                .isEqualTo(oldRoleId);
+        assertThat(isolatedJdbcTemplate.queryForObject(
+                        "SELECT COUNT(*) FROM sys_role WHERE id = ?",
+                        Integer.class,
+                        driftedNewRoleId))
+                .isZero();
+        assertThat(permissionCodes(isolatedJdbcTemplate, oldRoleId))
+                .containsExactlyElementsOf(expectedPermissionCodes);
+        assertThat(isolatedJdbcTemplate.queryForList("""
+                        SELECT u.username
+                        FROM sys_user_role ur
+                        JOIN sys_user u ON u.id = ur.user_id
+                        WHERE ur.role_id = ?
+                        ORDER BY u.username
+                        """, String.class, oldRoleId))
+                .containsExactly("drift_new_only", "superadmin");
+        assertThat(isolatedJdbcTemplate.queryForObject("""
+                        SELECT COUNT(*)
+                        FROM sys_user_role
+                        WHERE role_id = ? AND user_id = (
+                          SELECT id FROM sys_user WHERE username = 'superadmin'
+                        )
+                        """, Integer.class, oldRoleId))
+                .isOne();
     }
 
     @Test
@@ -400,6 +485,27 @@ class MigrationSmokeTest {
                 "");
         dataSource.setDriverClassName("org.h2.Driver");
         return dataSource;
+    }
+
+    private DriverManagerDataSource roleCleanupMigrationDataSource() {
+        DriverManagerDataSource dataSource = new DriverManagerDataSource(
+                "jdbc:h2:mem:department_role_cleanup_drift_%d;MODE=MySQL;DATABASE_TO_LOWER=TRUE;"
+                        .formatted(System.nanoTime())
+                        + "DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1",
+                "sa",
+                "");
+        dataSource.setDriverClassName("org.h2.Driver");
+        return dataSource;
+    }
+
+    private List<String> permissionCodes(JdbcTemplate template, Long roleId) {
+        return template.queryForList("""
+                SELECT p.code
+                FROM sys_role_permission rp
+                JOIN sys_permission p ON p.id = rp.permission_id
+                WHERE rp.role_id = ?
+                ORDER BY p.code
+                """, String.class, roleId);
     }
 
     private List<ForeignKeyRef> importedKeys(String tableName) throws SQLException {

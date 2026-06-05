@@ -30,6 +30,7 @@ const loading = ref(false)
 const saving = ref(false)
 const roleLoadError = ref('')
 const rolesLoaded = ref(false)
+let roleRequestSequence = 0
 
 const visible = computed({
   get: () => props.modelValue,
@@ -51,31 +52,48 @@ const toMessage = (error: unknown, fallback: string) => {
 }
 
 const loadRoles = async () => {
+  const requestSequence = ++roleRequestSequence
+  const targetUser = props.user
   roles.value = []
   rolesLoaded.value = false
   roleLoadError.value = ''
   loading.value = false
 
-  if (!props.user) {
+  if (!targetUser) {
     return
   }
 
   loading.value = true
+  const isCurrentRequest = () => {
+    return (
+      requestSequence === roleRequestSequence &&
+      props.modelValue &&
+      props.user?.id === targetUser.id
+    )
+  }
 
   try {
     // 角色可选范围取决于“被分配人”，必须把目标用户 ID 传给后端统一裁剪。
-    const loadedRoles = await fetchRoles(props.user.id)
+    const loadedRoles = await fetchRoles(targetUser.id)
+    if (!isCurrentRequest()) {
+      return
+    }
     roles.value = loadedRoles
     const assignableRoleCodes = new Set(loadedRoles.map((role) => role.code))
     // 仅回显后端允许分配的现有角色，避免历史隐藏角色被再次提交。
-    selectedRoleCodes.value = props.user.roles.filter((roleCode) => assignableRoleCodes.has(roleCode))
+    selectedRoleCodes.value = targetUser.roles.filter((roleCode) => assignableRoleCodes.has(roleCode))
     rolesLoaded.value = true
   } catch (error) {
+    if (!isCurrentRequest()) {
+      return
+    }
     const message = toMessage(error, '角色列表加载失败')
     roleLoadError.value = message
     ElMessage.error(message)
   } finally {
-    loading.value = false
+    if (isCurrentRequest()) {
+      loading.value = false
+    }
   }
 }
 
@@ -83,6 +101,7 @@ watch(
   () => props.modelValue,
   (opened) => {
     if (!opened) {
+      roleRequestSequence += 1
       return
     }
 
