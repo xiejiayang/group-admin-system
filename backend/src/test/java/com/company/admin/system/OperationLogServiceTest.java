@@ -94,7 +94,7 @@ class OperationLogServiceTest {
                 operator,
                 targetUser,
                 List.of(
-                        role("GENERAL_ADMIN_MANAGER", "综合管理部管理员", true),
+                        role("GENERAL_ADMIN_ADMIN", "综合管理部管理员", true),
                         role("PARTY_HR_ADMIN", "党群人力部管理员", true)));
 
         OperationLog log = savedLog();

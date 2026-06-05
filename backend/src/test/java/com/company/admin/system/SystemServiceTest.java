@@ -73,10 +73,9 @@ class SystemServiceTest {
         when(userRepository.findByIdAndDeletedFalse(3L)).thenReturn(Optional.of(target));
         when(roleRepository.findByEnabledTrueOrderByIdAsc()).thenReturn(List.of(
                 role("SUPER_ADMIN"),
-                role("DEPARTMENT_USER"),
                 role("PARTY_HR_ADMIN"),
                 role("PARTY_HR_USER"),
-                role("GENERAL_ADMIN_MANAGER"),
+                role("GENERAL_ADMIN_ADMIN"),
                 role("GENERAL_ADMIN_USER")));
 
         List<RoleResponse> responses = systemService.roles("party_admin", 3L);
@@ -103,17 +102,16 @@ class SystemServiceTest {
         User operator = user(5L, "superadmin", role("SUPER_ADMIN"));
         User target = user(6L, "party_user", department("PARTY_HR", "党群人力部"), role("PARTY_HR_USER"));
         Role partyHrAdmin = role("PARTY_HR_ADMIN");
-        Role departmentRole = role("DEPARTMENT_USER");
 
         when(userRepository.findByUsernameAndDeletedFalse("superadmin")).thenReturn(Optional.of(operator));
         when(userRepository.findByIdAndDeletedFalse(6L)).thenReturn(Optional.of(target));
-        when(roleRepository.findByCodeInAndEnabledTrue(any())).thenReturn(List.of(partyHrAdmin, departmentRole));
+        when(roleRepository.findByCodeInAndEnabledTrue(any())).thenReturn(List.of(partyHrAdmin));
 
         systemService.assignRoles("superadmin", 6L, new AssignRolesRequest(List.of("PARTY_HR_ADMIN")));
 
-        verify(operationLogService).recordRoleAssigned(operator, target, List.of(partyHrAdmin, departmentRole));
+        verify(operationLogService).recordRoleAssigned(operator, target, List.of(partyHrAdmin));
         assertThat(target.getRoles()).extracting(Role::getCode)
-                .containsExactlyInAnyOrder("DEPARTMENT_USER", "PARTY_HR_ADMIN");
+                .containsExactly("PARTY_HR_ADMIN");
     }
 
     @Test

@@ -1,6 +1,6 @@
-import { flushPromises, mount } from '@vue/test-utils'
+import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { SystemRole, SystemUser } from '@/api/system'
 
@@ -13,6 +13,8 @@ vi.mock('@/api/system', () => ({
   fetchRoles: fetchRolesMock,
   assignUserRoles: assignUserRolesMock
 }))
+
+enableAutoUnmount(afterEach)
 
 const targetUser = (): SystemUser => ({
   id: 7,
@@ -27,7 +29,7 @@ const targetUser = (): SystemUser => ({
 
 const roles = (): SystemRole[] => [
   { id: 1, code: 'GENERAL_ADMIN_USER', name: '综合管理员' },
-  { id: 2, code: 'SUPER_ADMIN', name: '超级管理员' }
+  { id: 2, code: 'GENERAL_ADMIN_ADMIN', name: '综合管理部管理员' }
 ]
 
 describe('RoleAssignDialog', () => {
@@ -72,5 +74,40 @@ describe('RoleAssignDialog', () => {
     await flushPromises()
 
     expect(fetchRolesMock).not.toHaveBeenCalled()
+  })
+
+  it('only submits current roles that are returned as assignable by backend', async () => {
+    const user = {
+      ...targetUser(),
+      roles: ['DEPARTMENT_USER', 'GENERAL_ADMIN_USER']
+    }
+    assignUserRolesMock.mockResolvedValue({
+      ...user,
+      roles: ['GENERAL_ADMIN_USER']
+    })
+    const wrapper = mount(RoleAssignDialog, {
+      props: {
+        modelValue: false,
+        user
+      },
+      global: {
+        plugins: [ElementPlus]
+      },
+      attachTo: document.body
+    })
+
+    await wrapper.setProps({ modelValue: true })
+    await flushPromises()
+
+    const saveButton = Array.from(document.body.querySelectorAll('button')).find(
+      (button) => button.textContent?.trim() === '保存'
+    )
+    expect(saveButton).toBeTruthy()
+    saveButton?.click()
+    await flushPromises()
+
+    expect(assignUserRolesMock).toHaveBeenCalledWith(user.id, {
+      roleCodes: ['GENERAL_ADMIN_USER']
+    })
   })
 })

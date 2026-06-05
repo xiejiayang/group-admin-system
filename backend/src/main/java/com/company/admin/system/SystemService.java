@@ -124,7 +124,8 @@ public class SystemService {
         }
         validateRequestedRoleCodes(user, requestedCodes);
 
-        Set<String> finalRoleCodes = finalRoleCodes(user, requestedCodes);
+        // 角色保存结果严格等于本次请求，避免后端补入前端不可见或已废弃的角色。
+        Set<String> finalRoleCodes = new LinkedHashSet<>(requestedCodes);
         List<Role> roles = roleRepository.findByCodeInAndEnabledTrue(finalRoleCodes);
         Map<String, Role> rolesByCode = roles.stream()
                 .collect(Collectors.toMap(Role::getCode, Function.identity()));
@@ -178,7 +179,7 @@ public class SystemService {
     }
 
     private void validateRequestedRoleCodes(User target, Set<String> requestedCodes) {
-        // 前端只提交弹窗可见角色；隐藏的 DEPARTMENT_USER 由后端补齐，不允许客户端直接提交。
+        // 前端只能提交目标用户所属部门可见角色，后端仍需再次校验以阻止跨部门越权。
         Set<String> allowedRoleCodes = isSuperAdminTarget(target)
                 ? Set.of(DepartmentAccessPolicy.SUPER_ADMIN_ROLE)
                 : departmentAccessPolicy.visibleAssignableRoleCodes(target);
@@ -188,15 +189,6 @@ public class SystemService {
         if (!invalidCodes.isEmpty()) {
             throw new BusinessException("用户所属部门不允许分配角色: " + String.join(",", invalidCodes));
         }
-    }
-
-    private Set<String> finalRoleCodes(User target, Set<String> requestedCodes) {
-        Set<String> finalRoleCodes = new LinkedHashSet<>(requestedCodes);
-        // 部门账号必须始终保留基础部门角色，避免设置弹窗隐藏该角色后保存时误清空基础身份。
-        if (!isSuperAdminTarget(target) && departmentCode(target) != null) {
-            finalRoleCodes.add(DepartmentAccessPolicy.DEFAULT_DEPARTMENT_ROLE);
-        }
-        return finalRoleCodes;
     }
 
     private void ensureCanManageTarget(User operator, User target) {
@@ -218,7 +210,7 @@ public class SystemService {
             return PARTY_HR_DEPARTMENT;
         }
         if (GENERAL_ADMIN_DEPARTMENT.equals(departmentCode(operator))
-                && hasRole(operator, DepartmentAccessPolicy.GENERAL_ADMIN_MANAGER_ROLE)) {
+                && hasRole(operator, DepartmentAccessPolicy.GENERAL_ADMIN_ADMIN_ROLE)) {
             return GENERAL_ADMIN_DEPARTMENT;
         }
         return null;

@@ -133,17 +133,17 @@ class SystemControllerTest {
                 .andExpect(jsonPath("$.data[*].code", hasItem("PARTY_HR_ADMIN")))
                 .andExpect(jsonPath("$.data[*].code", hasItem("PARTY_HR_USER")))
                 .andExpect(jsonPath("$.data[*].code", not(hasItem("SUPER_ADMIN"))))
-                .andExpect(jsonPath("$.data[*].code", not(hasItem("GENERAL_ADMIN_MANAGER"))))
+                .andExpect(jsonPath("$.data[*].code", not(hasItem("GENERAL_ADMIN_ADMIN"))))
                 .andExpect(jsonPath("$.data[*].code", not(hasItem("GENERAL_ADMIN_USER"))))
                 .andExpect(jsonPath("$.data[*].code", not(hasItem("DEPARTMENT_USER"))));
     }
 
     @Test
-    void generalAdminManagerOnlyReadsGeneralAdminUsers() throws Exception {
+    void generalAdminAdminOnlyReadsGeneralAdminUsers() throws Exception {
         AuthPayload manager = registerUser("task4_general_manager_users", "GENERAL_ADMIN");
         AuthPayload generalUser = registerUser("task4_general_visible", "GENERAL_ADMIN");
         AuthPayload partyUser = registerUser("task4_party_hidden", "PARTY_HR");
-        grantRoles(manager.id(), "GENERAL_ADMIN_MANAGER");
+        grantRoles(manager.id(), "GENERAL_ADMIN_ADMIN");
 
         mockMvc.perform(get("/api/system/users")
                         .header("Authorization", "Bearer " + manager.token()))
@@ -155,10 +155,10 @@ class SystemControllerTest {
     }
 
     @Test
-    void generalAdminManagerRolesForDepartmentUserOnlyReturnManagerAndUser() throws Exception {
+    void generalAdminAdminRolesForDepartmentUserOnlyReturnAdminAndUser() throws Exception {
         AuthPayload manager = registerUser("task4_general_manager_roles", "GENERAL_ADMIN");
         AuthPayload target = registerUser("task4_general_role_target", "GENERAL_ADMIN");
-        grantRoles(manager.id(), "GENERAL_ADMIN_MANAGER");
+        grantRoles(manager.id(), "GENERAL_ADMIN_ADMIN");
 
         mockMvc.perform(get("/api/system/roles")
                         .param("targetUserId", String.valueOf(target.id()))
@@ -166,7 +166,7 @@ class SystemControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data", hasSize(2)))
-                .andExpect(jsonPath("$.data[*].code", hasItem("GENERAL_ADMIN_MANAGER")))
+                .andExpect(jsonPath("$.data[*].code", hasItem("GENERAL_ADMIN_ADMIN")))
                 .andExpect(jsonPath("$.data[*].code", hasItem("GENERAL_ADMIN_USER")))
                 .andExpect(jsonPath("$.data[*].code", not(hasItem("SUPER_ADMIN"))))
                 .andExpect(jsonPath("$.data[*].code", not(hasItem("PARTY_HR_ADMIN"))))
@@ -175,11 +175,11 @@ class SystemControllerTest {
     }
 
     @Test
-    void generalAdminManagerOnlyReadsGeneralAdminOperationLogs() throws Exception {
+    void generalAdminAdminOnlyReadsGeneralAdminOperationLogs() throws Exception {
         AuthPayload manager = registerUser("task4_general_manager_logs", "GENERAL_ADMIN");
         AuthPayload generalUser = registerUser("task4_general_log_visible", "GENERAL_ADMIN");
         AuthPayload partyUser = registerUser("task4_party_log_hidden", "PARTY_HR");
-        grantRoles(manager.id(), "GENERAL_ADMIN_MANAGER");
+        grantRoles(manager.id(), "GENERAL_ADMIN_ADMIN");
         loginUser(generalUser.username(), "StrongPass123");
         loginUser(partyUser.username(), "StrongPass123");
 
@@ -263,8 +263,8 @@ class SystemControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.id").value(user.id()))
-                .andExpect(jsonPath("$.data.roles", hasItem("DEPARTMENT_USER")))
                 .andExpect(jsonPath("$.data.roles", hasItem("PARTY_HR_USER")))
+                .andExpect(jsonPath("$.data.roles", not(hasItem("DEPARTMENT_USER"))))
                 .andExpect(jsonPath("$.data.roles", not(hasItem("GENERAL_ADMIN_USER"))));
     }
 
@@ -282,7 +282,7 @@ class SystemControllerTest {
                 .andExpect(jsonPath("$.success").value(false));
 
         assertThat(assignedRoleCodes(user.id()))
-                .contains("DEPARTMENT_USER", "PARTY_HR_USER");
+                .containsExactly("PARTY_HR_USER");
     }
 
     @Test
@@ -299,8 +299,7 @@ class SystemControllerTest {
                 .andExpect(jsonPath("$.success").value(false));
 
         assertThat(assignedRoleCodes(user.id()))
-                .contains("DEPARTMENT_USER", "PARTY_HR_USER")
-                .doesNotContain("SUPER_ADMIN");
+                .containsExactly("PARTY_HR_USER");
     }
 
     @Test
@@ -317,12 +316,11 @@ class SystemControllerTest {
                 .andExpect(jsonPath("$.success").value(false));
 
         assertThat(assignedRoleCodes(user.id()))
-                .contains("DEPARTMENT_USER", "PARTY_HR_USER")
-                .doesNotContain("SUPER_ADMIN");
+                .containsExactly("PARTY_HR_USER");
     }
 
     @Test
-    void departmentAdminAssignsVisibleRoleAndPreservesDepartmentBaseRole() throws Exception {
+    void departmentAdminAssignsOnlyRequestedVisibleRole() throws Exception {
         AuthPayload admin = registerUser("task4_party_admin_base", "PARTY_HR");
         AuthPayload target = registerUser("task4_party_base_target", "PARTY_HR");
         grantRoles(admin.id(), "PARTY_HR_ADMIN");
@@ -334,8 +332,8 @@ class SystemControllerTest {
                                 "roleCodes", java.util.List.of("PARTY_HR_ADMIN")))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data.roles", hasItem("DEPARTMENT_USER")))
-                .andExpect(jsonPath("$.data.roles", hasItem("PARTY_HR_ADMIN")));
+                .andExpect(jsonPath("$.data.roles", hasItem("PARTY_HR_ADMIN")))
+                .andExpect(jsonPath("$.data.roles", not(hasItem("DEPARTMENT_USER"))));
     }
 
     @Test

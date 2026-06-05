@@ -9,7 +9,7 @@ const PARTY_HR_MENU_PERMISSION = 'menu:party-hr'
 const GENERAL_ADMIN_MENU_PERMISSION = 'menu:general-admin'
 const APPOINTMENT_MANAGE_PERMISSION = 'appointment:manage'
 const SETTINGS_MENU_PERMISSION = 'menu:settings'
-const SETTINGS_ADMIN_ROLES = ['PARTY_HR_ADMIN', 'GENERAL_ADMIN_MANAGER']
+const SETTINGS_ADMIN_ROLES = ['PARTY_HR_ADMIN', 'GENERAL_ADMIN_ADMIN']
 const SETTINGS_PATHS = ['/settings', '/settings/users', '/settings/logs']
 
 const normalizedPath = (path: string) => {

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
 
 import com.company.admin.auth.dto.LoginRequest;
@@ -72,12 +73,10 @@ class AuthServiceTest {
                 "StrongPass123",
                 "13600136002",
                 "PARTY_HR");
-        Role defaultRole = role("DEPARTMENT_USER");
         Role departmentRole = role("PARTY_HR_USER");
 
         when(userRepository.existsByUsername("register_user")).thenReturn(false);
         when(departmentRepository.findByCodeAndEnabledTrue("PARTY_HR")).thenReturn(Optional.of(new Department()));
-        when(roleRepository.findByCodeAndEnabledTrue("DEPARTMENT_USER")).thenReturn(Optional.of(defaultRole));
         when(roleRepository.findByCodeAndEnabledTrue("PARTY_HR_USER")).thenReturn(Optional.of(departmentRole));
         when(passwordEncoder.encode("StrongPass123")).thenReturn("encoded-password");
         when(userRepository.saveAndFlush(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -88,6 +87,10 @@ class AuthServiceTest {
         ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
         verify(userRepository).saveAndFlush(userCaptor.capture());
         assertThat(userCaptor.getValue().getRealName()).isEqualTo("Task Three User");
+        assertThat(userCaptor.getValue().getRoles())
+                .extracting(Role::getCode)
+                .containsExactly("PARTY_HR_USER");
+        verify(roleRepository, never()).findByCodeAndEnabledTrue("DEPARTMENT_USER");
     }
 
     @Test
@@ -97,7 +100,7 @@ class AuthServiceTest {
         user.setRealName("Login Real Name");
         user.setPasswordHash("encoded-password");
         user.setStatus(User.STATUS_ENABLED);
-        user.getRoles().add(role("DEPARTMENT_USER"));
+        user.getRoles().add(role("PARTY_HR_USER"));
 
         when(userRepository.findByUsernameAndDeletedFalse("login_user")).thenReturn(Optional.of(user));
         when(passwordEncoder.matches("plain-password", "encoded-password")).thenReturn(true);
@@ -119,7 +122,6 @@ class AuthServiceTest {
 
         when(userRepository.existsByUsername("race_user")).thenReturn(false);
         when(departmentRepository.findByCodeAndEnabledTrue("PARTY_HR")).thenReturn(Optional.of(new Department()));
-        when(roleRepository.findByCodeAndEnabledTrue("DEPARTMENT_USER")).thenReturn(Optional.of(new Role()));
         when(roleRepository.findByCodeAndEnabledTrue("PARTY_HR_USER")).thenReturn(Optional.of(new Role()));
         when(passwordEncoder.encode("StrongPass123")).thenReturn("encoded-password");
         when(userRepository.saveAndFlush(any(User.class)))
@@ -142,7 +144,6 @@ class AuthServiceTest {
 
         when(userRepository.existsByUsername("valid_user")).thenReturn(false);
         when(departmentRepository.findByCodeAndEnabledTrue("PARTY_HR")).thenReturn(Optional.of(new Department()));
-        when(roleRepository.findByCodeAndEnabledTrue("DEPARTMENT_USER")).thenReturn(Optional.of(new Role()));
         when(roleRepository.findByCodeAndEnabledTrue("PARTY_HR_USER")).thenReturn(Optional.of(new Role()));
         when(passwordEncoder.encode("StrongPass123")).thenReturn("encoded-password");
         when(userRepository.saveAndFlush(any(User.class)))

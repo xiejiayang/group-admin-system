@@ -64,7 +64,11 @@ const loadRoles = async () => {
 
   try {
     // 角色可选范围取决于“被分配人”，必须把目标用户 ID 传给后端统一裁剪。
-    roles.value = await fetchRoles(props.user.id)
+    const loadedRoles = await fetchRoles(props.user.id)
+    roles.value = loadedRoles
+    const assignableRoleCodes = new Set(loadedRoles.map((role) => role.code))
+    // 仅回显后端允许分配的现有角色，避免历史隐藏角色被再次提交。
+    selectedRoleCodes.value = props.user.roles.filter((roleCode) => assignableRoleCodes.has(roleCode))
     rolesLoaded.value = true
   } catch (error) {
     const message = toMessage(error, '角色列表加载失败')

@@ -12,9 +12,8 @@ import org.springframework.stereotype.Component;
 public class DepartmentAccessPolicy {
 
     public static final String SUPER_ADMIN_ROLE = "SUPER_ADMIN";
-    public static final String DEFAULT_DEPARTMENT_ROLE = "DEPARTMENT_USER";
     public static final String PARTY_HR_ADMIN_ROLE = "PARTY_HR_ADMIN";
-    public static final String GENERAL_ADMIN_MANAGER_ROLE = "GENERAL_ADMIN_MANAGER";
+    public static final String GENERAL_ADMIN_ADMIN_ROLE = "GENERAL_ADMIN_ADMIN";
     public static final String PARTY_HR_USER = "PARTY_HR_USER";
     public static final String GENERAL_ADMIN_USER = "GENERAL_ADMIN_USER";
 
@@ -30,17 +29,13 @@ public class DepartmentAccessPolicy {
             GENERAL_ADMIN_DEPARTMENT, GENERAL_ADMIN_USER);
 
     private static final Map<String, Set<String>> DEPARTMENT_ASSIGNABLE_ROLE_CODES = Map.of(
-            PARTY_HR_DEPARTMENT, linkedRoleSet(DEFAULT_DEPARTMENT_ROLE, PARTY_HR_ADMIN_ROLE, PARTY_HR_USER),
+            PARTY_HR_DEPARTMENT, linkedRoleSet(PARTY_HR_ADMIN_ROLE, PARTY_HR_USER),
             GENERAL_ADMIN_DEPARTMENT,
-                    linkedRoleSet(DEFAULT_DEPARTMENT_ROLE, GENERAL_ADMIN_MANAGER_ROLE, GENERAL_ADMIN_USER));
+                    linkedRoleSet(GENERAL_ADMIN_ADMIN_ROLE, GENERAL_ADMIN_USER));
 
     // 目前部门、菜单、角色仍是固定业务域；后续新增部门时，应在这里同步扩展映射，避免配置分散。
     public Set<String> registerDepartmentCodes() {
         return DEPARTMENT_ROLE_CODES.keySet();
-    }
-
-    public String defaultDepartmentRoleCode() {
-        return DEFAULT_DEPARTMENT_ROLE;
     }
 
     public Optional<String> departmentRoleCode(String departmentCode) {
@@ -86,9 +81,7 @@ public class DepartmentAccessPolicy {
     }
 
     public Set<String> visibleAssignableRoleCodes(User user) {
-        Set<String> roleCodes = new LinkedHashSet<>(assignableRoleCodes(user));
-        roleCodes.remove(DEFAULT_DEPARTMENT_ROLE);
-        return roleCodes;
+        return new LinkedHashSet<>(assignableRoleCodes(user));
     }
 
     private String departmentCode(User user) {

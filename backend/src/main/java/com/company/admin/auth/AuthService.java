@@ -82,8 +82,6 @@ public class AuthService {
 
         Department department = departmentRepository.findByCodeAndEnabledTrue(request.departmentCode())
                 .orElseThrow(() -> new BusinessException("部门不存在或已停用"));
-        Role defaultRole = roleRepository.findByCodeAndEnabledTrue(departmentAccessPolicy.defaultDepartmentRoleCode())
-                .orElseThrow(() -> new BusinessException("默认角色不存在或已停用"));
         String departmentRoleCode = departmentAccessPolicy.departmentRoleCode(request.departmentCode())
                 .orElseThrow(() -> new BusinessException("部门细分角色不存在或已停用"));
         Role departmentRole = roleRepository.findByCodeAndEnabledTrue(departmentRoleCode)
@@ -99,8 +97,7 @@ public class AuthService {
         user.setDeleted(false);
         // 注册密码写入前必须 BCrypt 加密，数据库永远不保存明文密码。
         user.setPasswordHash(passwordEncoder.encode(request.password()));
-        // 注册账号同时绑定基础部门角色和部门细分角色，避免 DEPARTMENT_USER 聚合出跨部门菜单权限。
-        user.getRoles().add(defaultRole);
+        // 新注册账号只绑定所属部门 USER 角色，管理员权限必须由上级管理员后续显式分配。
         user.getRoles().add(departmentRole);
 
         try {

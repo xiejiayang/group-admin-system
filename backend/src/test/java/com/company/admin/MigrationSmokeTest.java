@@ -128,7 +128,7 @@ class MigrationSmokeTest {
         Integer adminRoleCount = jdbcTemplate.queryForObject("""
                 SELECT COUNT(*)
                 FROM sys_role
-                WHERE code IN ('PARTY_HR_ADMIN', 'GENERAL_ADMIN_MANAGER')
+                WHERE code IN ('PARTY_HR_ADMIN', 'GENERAL_ADMIN_ADMIN')
                 """, Integer.class);
         Integer operationLogPermissionCount = jdbcTemplate.queryForObject("""
                 SELECT COUNT(*)
@@ -147,6 +147,77 @@ class MigrationSmokeTest {
         assertThat(adminRoleCount).isEqualTo(2);
         assertThat(operationLogPermissionCount).isOne();
         assertThat(operationLogDepartmentNullable).isEqualTo("YES");
+    }
+
+    @Test
+    void departmentRoleCleanupMigrationRenamesManagerAndRemovesDepartmentUser() {
+        DriverManagerDataSource dataSource = new DriverManagerDataSource(
+                "jdbc:h2:mem:department_role_cleanup_%d;MODE=MySQL;DATABASE_TO_LOWER=TRUE;"
+                        .formatted(System.nanoTime())
+                        + "DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1",
+                "sa",
+                "");
+        dataSource.setDriverClassName("org.h2.Driver");
+
+        Flyway.configure()
+                .dataSource(dataSource)
+                .locations("classpath:db/migration")
+                .target("4")
+                .load()
+                .migrate();
+
+        JdbcTemplate isolatedJdbcTemplate = new JdbcTemplate(dataSource);
+        Long managerRoleId = isolatedJdbcTemplate.queryForObject(
+                "SELECT id FROM sys_role WHERE code = 'GENERAL_ADMIN_MANAGER'",
+                Long.class);
+        Integer managerPermissionCount = isolatedJdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM sys_role_permission WHERE role_id = ?",
+                Integer.class,
+                managerRoleId);
+        isolatedJdbcTemplate.update("""
+                INSERT INTO sys_user_role(user_id, role_id)
+                SELECT u.id, r.id
+                FROM sys_user u
+                JOIN sys_role r ON r.code IN ('GENERAL_ADMIN_MANAGER', 'DEPARTMENT_USER')
+                WHERE u.username = 'superadmin'
+                """);
+
+        Flyway.configure()
+                .dataSource(dataSource)
+                .locations("classpath:db/migration")
+                .load()
+                .migrate();
+
+        assertThat(isolatedJdbcTemplate.queryForList(
+                        "SELECT code FROM sys_role ORDER BY code",
+                        String.class))
+                .containsExactly(
+                        "GENERAL_ADMIN_ADMIN",
+                        "GENERAL_ADMIN_USER",
+                        "PARTY_HR_ADMIN",
+                        "PARTY_HR_USER",
+                        "SUPER_ADMIN");
+        assertThat(isolatedJdbcTemplate.queryForObject(
+                        "SELECT id FROM sys_role WHERE code = 'GENERAL_ADMIN_ADMIN'",
+                        Long.class))
+                .isEqualTo(managerRoleId);
+        assertThat(isolatedJdbcTemplate.queryForObject(
+                        "SELECT COUNT(*) FROM sys_role_permission WHERE role_id = ?",
+                        Integer.class,
+                        managerRoleId))
+                .isEqualTo(managerPermissionCount);
+        assertThat(isolatedJdbcTemplate.queryForObject("""
+                        SELECT COUNT(*)
+                        FROM sys_user_role ur
+                        JOIN sys_user u ON u.id = ur.user_id
+                        JOIN sys_role r ON r.id = ur.role_id
+                        WHERE u.username = 'superadmin' AND r.code = 'GENERAL_ADMIN_ADMIN'
+                        """, Integer.class))
+                .isOne();
+        assertThat(isolatedJdbcTemplate.queryForObject(
+                        "SELECT COUNT(*) FROM sys_role WHERE code IN ('GENERAL_ADMIN_MANAGER', 'DEPARTMENT_USER')",
+                        Integer.class))
+                .isZero();
     }
 
     @Test
