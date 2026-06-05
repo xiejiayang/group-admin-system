@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Refresh, SwitchButton, User } from '@element-plus/icons-vue'
+import { ArrowLeft, ArrowRight, Refresh, SwitchButton, User } from '@element-plus/icons-vue'
 import {
   ElAlert,
   ElAside,
@@ -12,7 +12,7 @@ import {
   ElSkeleton,
   ElTag
 } from 'element-plus'
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { RouterView, useRouter } from 'vue-router'
 
 import PermissionMenu from '@/components/PermissionMenu.vue'
@@ -22,10 +22,13 @@ import { useMenuStore } from '@/stores/menu'
 const router = useRouter()
 const authStore = useAuthStore()
 const menuStore = useMenuStore()
+const sidebarCollapsed = ref(false)
 
 const user = computed(() => authStore.user)
 const departmentText = computed(() => user.value?.departmentName || user.value?.departmentCode || '集团后台')
 const roleText = computed(() => user.value?.roles.join('、') || '未分配角色')
+const sidebarWidth = computed(() => (sidebarCollapsed.value ? '72px' : '224px'))
+const sidebarToggleIcon = computed(() => (sidebarCollapsed.value ? ArrowRight : ArrowLeft))
 
 const loadMenus = async (force = false) => {
   try {
@@ -43,6 +46,10 @@ const handleRetryMenus = () => {
   void loadMenus(true)
 }
 
+const toggleSidebar = () => {
+  sidebarCollapsed.value = !sidebarCollapsed.value
+}
+
 const handleLogout = async () => {
   authStore.logout()
   menuStore.clear()
@@ -52,10 +59,21 @@ const handleLogout = async () => {
 
 <template>
   <el-container class="app-layout">
-    <el-aside class="app-sidebar" width="224px">
+    <el-aside class="app-sidebar" :class="{ 'is-collapsed': sidebarCollapsed }" :width="sidebarWidth">
+      <button
+        class="sidebar-toggle"
+        type="button"
+        :aria-label="sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'"
+        @click="toggleSidebar"
+      >
+        <el-icon>
+          <component :is="sidebarToggleIcon" />
+        </el-icon>
+      </button>
+
       <div class="app-brand">
         <span class="app-brand-mark">管</span>
-        <div>
+        <div class="app-brand-text">
           <strong>集团后台</strong>
           <small>管理系统</small>
         </div>
@@ -69,7 +87,7 @@ const handleLogout = async () => {
       <div v-else-if="menuStore.menus.length === 0" class="menu-state menu-empty-state">
         <el-empty description="暂无可访问菜单" :image-size="64" />
       </div>
-      <permission-menu v-else :menus="menuStore.menus" />
+      <permission-menu v-else :collapsed="sidebarCollapsed" :menus="menuStore.menus" />
     </el-aside>
 
     <el-container class="app-main-shell">
