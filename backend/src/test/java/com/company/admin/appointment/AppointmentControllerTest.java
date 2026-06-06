@@ -548,6 +548,12 @@ class AppointmentControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.name").value("persisted-age-updated"))
                 .andExpect(jsonPath("$.data.age").value(52));
+
+        mockMvc.perform(get("/api/party-hr/appointments/{id}", appointmentId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.name").value("persisted-age-updated"))
+                .andExpect(jsonPath("$.data.age").value(52));
     }
 
     @Test
