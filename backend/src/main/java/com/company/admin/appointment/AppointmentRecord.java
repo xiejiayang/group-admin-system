@@ -58,6 +58,9 @@ public class AppointmentRecord {
     @Column(name = "birth_date")
     private LocalDate birthDate;
 
+    @Column
+    private Integer age;
+
     @Column(length = 60)
     private String ethnicity;
 
@@ -280,6 +283,14 @@ public class AppointmentRecord {
 
     public void setBirthDate(LocalDate birthDate) {
         this.birthDate = birthDate;
+    }
+
+    public Integer getAge() {
+        return age;
+    }
+
+    public void setAge(Integer age) {
+        this.age = age;
     }
 
     public String getEthnicity() {

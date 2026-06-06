@@ -320,7 +320,7 @@ public class AppointmentService {
                 record.getGender(),
                 record.getEthnicity(),
                 record.getIdCard(),
-                calculateAge(record.getBirthDate()),
+                resolveAge(record),
                 record.getPoliticalStatus(),
                 record.getFullTimeEducation(),
                 record.getFullTimeEducationDegree(),
@@ -352,7 +352,7 @@ public class AppointmentService {
                 record.getAddress(),
                 record.getGender(),
                 record.getBirthDate(),
-                calculateAge(record.getBirthDate()),
+                resolveAge(record),
                 record.getEthnicity(),
                 record.getPoliticalStatus(),
                 record.getNativePlace(),
@@ -395,6 +395,11 @@ public class AppointmentService {
                                 .thenComparing(member -> member.getId() == null ? 0L : member.getId()))
                         .map(this::toFamilyMemberResponse)
                         .toList());
+    }
+
+    private Integer resolveAge(AppointmentRecord record) {
+        // Excel 导入的历史年龄按原值保留；普通新增记录未落库年龄时，继续按出生日期动态计算。
+        return record.getAge() != null ? record.getAge() : calculateAge(record.getBirthDate());
     }
 
     private Integer calculateAge(LocalDate birthDate) {

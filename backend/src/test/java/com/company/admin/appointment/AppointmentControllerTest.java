@@ -521,6 +521,36 @@ class AppointmentControllerTest {
     }
 
     @Test
+    void persistedAgeTakesPrecedenceAndSurvivesEditableUpdate() throws Exception {
+        String token = loginSuperadmin().token();
+        Long appointmentId = createAppointment(token, createRequest("persisted-age", "reason", List.of()));
+        jdbcTemplate.update("UPDATE appointment_record SET age = ? WHERE id = ?", 52, appointmentId);
+
+        mockMvc.perform(get("/api/party-hr/appointments")
+                        .param("page", "0")
+                        .param("size", "10")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].id").value(appointmentId.intValue()))
+                .andExpect(jsonPath("$.data.items[0].age").value(52));
+
+        mockMvc.perform(get("/api/party-hr/appointments/{id}", appointmentId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(appointmentId))
+                .andExpect(jsonPath("$.data.age").value(52));
+
+        mockMvc.perform(put("/api/party-hr/appointments/{id}", appointmentId)
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                createRequest("persisted-age-updated", "reason", List.of()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.name").value("persisted-age-updated"))
+                .andExpect(jsonPath("$.data.age").value(52));
+    }
+
+    @Test
     void ageIsNullWhenBirthDateIsMissing() throws Exception {
         String token = loginSuperadmin().token();
         Map<String, Object> request = mutableCreateRequest();
