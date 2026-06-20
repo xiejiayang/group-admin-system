@@ -51,7 +51,7 @@ onMounted(() => {
 
     <el-card class="table-card" shadow="never">
       <el-skeleton v-if="loading && !hasLogs" class="table-skeleton" animated :rows="6" />
-      <el-table v-else-if="hasLogs" :data="logs" row-key="id">
+      <el-table v-else-if="hasLogs" :data="logs" row-key="id" height="100%">
         <el-table-column label="操作账号" min-width="140" prop="operatorUsername" show-overflow-tooltip />
         <el-table-column label="姓名" min-width="120" prop="realName" show-overflow-tooltip />
         <el-table-column label="部门" min-width="150" show-overflow-tooltip>
@@ -68,3 +68,21 @@ onMounted(() => {
     </el-card>
   </section>
 </template>
+
+<style scoped>
+.settings-page {
+  height: 100%;
+}
+
+.table-card {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.table-card :deep(.el-card__body) {
+  flex: 1;
+  overflow: hidden;
+}
+</style>
