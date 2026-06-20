@@ -3,10 +3,18 @@ import { ElButton, ElEmpty, ElTable, ElTableColumn } from 'element-plus'
 
 import type { AppointmentSummary } from '@/types/appointment'
 
-defineProps<{
-  appointments: AppointmentSummary[]
-  loading?: boolean
-}>()
+withDefaults(
+  defineProps<{
+    appointments: AppointmentSummary[]
+    loading?: boolean
+    // 固定表格可视高度，超出后表体内部纵向滚动，表头与页内其它元素保持不动。
+    maxHeight?: string | number
+  }>(),
+  {
+    loading: false,
+    maxHeight: 'calc(100vh - 320px)'
+  }
+)
 
 const emit = defineEmits<{
   view: [appointment: AppointmentSummary]
@@ -44,8 +52,10 @@ const requestDeleteFromRow = (row: unknown) => {
     class="appointment-board-table"
     :data="appointments"
     :loading="loading"
+    :max-height="maxHeight"
     border
     row-key="id"
+    scrollbar-always-on
     stripe
   >
     <!-- 表格字段与后端 AppointmentSummary 保持一致，分组表头仅负责展示。 -->
